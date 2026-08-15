@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Restaurant Command Center</title>
+  <link rel="stylesheet" href="/static/styles.css?v=6" />
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+
+  <section id="loginView" class="login-shell">
+    <div class="login-panel">
+      <form id="loginForm" class="login-card">
+        <div class="login-logo brand-mark">RC</div>
+        <h2>Sign in</h2>
+        <label>Username<input id="loginUsername" autocomplete="username" required /></label>
+        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+        <button class="btn primary full" type="submit">Sign in</button>
+        <div id="loginError" class="form-error"></div>
+      </form>
+    </div>
+  </section>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand-row"><div class="brand-mark small">RC</div><div><strong id="restaurantName">Restaurant</strong></div></div>
+      <nav id="nav">
+        <button data-page="dashboard" class="nav-item active">⌂ <span>Dashboard</span></button>
+        <button data-page="upload" class="nav-item">⇧ <span>Daily Upload</span></button>
+        <button data-page="sales" class="nav-item">↗ <span>Sales</span></button>
+        <button data-page="purchase" class="nav-item">▤ <span>Purchase / Expense</span></button>
+        <button data-page="daybook" class="nav-item">▣ <span>Daybook</span></button>
+        <button data-page="inventory" class="nav-item">◫ <span>Inventory</span></button>
+        <button data-page="compare" class="nav-item">⇄ <span>Branch Comparison</span></button>
+        <button data-page="history" class="nav-item">◷ <span>Upload History</span></button>
+        <button id="usersNav" data-page="users" class="nav-item owner-only">♙ <span>Users</span></button>
+        <button id="settingsNav" data-page="settings" class="nav-item owner-only">⚙ <span>Settings</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="user-chip"><div class="avatar" id="avatar">O</div><div><strong id="userName">Owner</strong><small id="userRole">Owner</small></div></div>
+        <button id="logoutBtn" class="btn ghost full">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><h2 id="pageTitle">Dashboard</h2></div>
+        <div class="filters">
+          <select id="branchFilter"></select>
+          <input id="startDate" type="date" title="From date" />
+          <input id="endDate" type="date" title="To date" />
+          <button id="refreshBtn" class="btn secondary">Refresh</button>
+        </div>
+      </header>
+      <div id="content" class="content"></div>
+    </main>
+  </div>
+
+  <script src="/static/app.js?v=6"></script>
+</body>
+</html>
