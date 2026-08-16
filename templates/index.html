@@ -3,28 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Restaurant Command Center</title>
-  <link rel="stylesheet" href="/static/styles.css?v=6" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>RestoSight — Operational Intelligence Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css?v=9.4" />
 </head>
 <body>
   <div id="toast" class="toast"></div>
 
   <section id="loginView" class="login-shell">
+    <div class="login-backdrop-mark" aria-hidden="true">RS</div>
     <div class="login-panel">
       <form id="loginForm" class="login-card">
-        <div class="login-logo brand-mark">RC</div>
-        <h2>Sign in</h2>
+        <div class="login-accent" aria-hidden="true"></div>
+        <div class="brand-lockup login-brand">
+          <div class="brand-mark">RS</div>
+          <div class="brand-copy">
+            <div class="brand-name">RestoSight</div>
+            <div class="brand-subtitle">Operational Intelligence Dashboard</div>
+          </div>
+        </div>
+        <div class="login-heading">
+          <h2>Welcome back</h2>
+          <p>Sign in to view your restaurant performance.</p>
+        </div>
         <label>Username<input id="loginUsername" autocomplete="username" required /></label>
         <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
-        <button class="btn primary full" type="submit">Sign in</button>
+        <button class="btn primary full login-submit" type="submit">Sign in</button>
         <div id="loginError" class="form-error"></div>
+        <div class="login-foot">RestoSight <span>•</span> Operational Intelligence</div>
       </form>
     </div>
   </section>
 
   <div id="appView" class="app-shell hidden">
     <aside class="sidebar">
-      <div class="brand-row"><div class="brand-mark small">RC</div><div><strong id="restaurantName">Restaurant</strong></div></div>
+      <div class="brand-row brand-lockup">
+        <div class="brand-mark small">RS</div>
+        <div class="brand-copy sidebar-brand-copy">
+          <strong class="brand-name">RestoSight</strong>
+          <small class="brand-subtitle">Operational Intelligence Dashboard</small>
+          <small class="restaurant-context"><span class="restaurant-dot"></span><span id="restaurantName">Your Restaurant</span></small>
+        </div>
+      </div>
       <nav id="nav">
         <button data-page="dashboard" class="nav-item active">⌂ <span>Dashboard</span></button>
         <button data-page="upload" class="nav-item">⇧ <span>Daily Upload</span></button>
@@ -57,6 +77,6 @@
     </main>
   </div>
 
-  <script src="/static/app.js?v=6"></script>
+  <script src="/static/app.js?v=9.4"></script>
 </body>
 </html>

@@ -31,7 +31,7 @@ SAMPLE_DIR = BASE / "sample-data"
 DATA_DIR.mkdir(exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Restaurant Command Center")
+app = FastAPI(title="RestoSight")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
 # Recipe / management assumptions.
@@ -168,10 +168,17 @@ def init_db():
         defaults = {
             "branch_1_name": "Branch 1",
             "branch_2_name": "Branch 2",
-            "restaurant_name": "Restaurant Command Center",
+            "restaurant_name": "Your Restaurant",
         }
         for k, v in defaults.items():
             conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (k, v))
+
+        # RestoSight is the platform brand; the restaurant name remains editable
+        # in Settings. Only migrate the old built-in default, never a custom name.
+        conn.execute(
+            "UPDATE settings SET value='Your Restaurant' "
+            "WHERE key='restaurant_name' AND value='Restaurant Command Center'"
+        )
         users = [
             ("owner", "Owner / Admin", "Owner@123", "owner", None),
             ("manager1", "Branch 1 Manager", "Manager@123", "manager", 1),
@@ -1056,7 +1063,7 @@ class LoginBody(BaseModel):
     password: str
 
 
-APP_ASSET_VERSION = "9.3"
+APP_ASSET_VERSION = "9.4"
 
 
 @app.middleware("http")

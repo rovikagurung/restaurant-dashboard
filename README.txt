@@ -1,16 +1,15 @@
-Restaurant Dashboard V9.2 - Management Highlights + Today's Owner Popup
+RestoSight Branding Update — V9.4
 
-Replace these files in the GitHub repository:
+Replace these files in GitHub:
 1. app.py
 2. static/app.js
+3. static/styles.css
+4. templates/index.html
 
-Changes:
-- Exactly 8 Management Highlights.
-- Management Highlights remain above Sales Trend.
-- Owner popup no longer shows items to order.
-- Owner popup shows today's Nepal date and only today's data across both branches:
-  * Today's date
-  * Pizzas sold today
-  * Total sales today
-  * Highest-selling item today
-- Same Railway/public URL can continue to be used after redeploy.
+Branding:
+- Logo: RS
+- Platform: RestoSight
+- Subtitle: Operational Intelligence Dashboard
+- Restaurant name: loaded dynamically from Settings and displayed beneath the RestoSight brand.
+
+This version keeps all V9.3 features, including strict upload validation, management highlights, inventory/order logic, owner popup, graphs, role permissions, and Railway support.

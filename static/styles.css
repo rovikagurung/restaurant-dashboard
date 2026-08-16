@@ -65,3 +65,62 @@ a{color:#000;text-decoration:none;transition:.15s}a:hover{color:var(--accent)}
 /* Dashboard graphs */
 .dashboard-graphs{align-items:stretch}.graph-panel{overflow:hidden}.chart-wrap-bars{height:310px}.graph-panel:hover{border-color:#d90819}.graph-panel .panel-head h3{transition:color .18s ease}.graph-panel:hover .panel-head h3{color:#d90819}
 @media(max-width:850px){.chart-wrap,.chart-wrap-bars{height:260px}}
+
+
+/* =========================================================
+   RestoSight brand system — v9.4
+   ========================================================= */
+.brand-lockup{display:flex;align-items:center;gap:13px}
+.brand-copy{min-width:0}
+.brand-name{font-weight:900;letter-spacing:-.035em;color:#000}
+.brand-subtitle{display:block;margin-top:2px;color:#666;font-size:10px;font-weight:700;line-height:1.25;letter-spacing:.015em}
+.brand-mark{position:relative;isolation:isolate;overflow:hidden;box-shadow:0 10px 26px rgba(217,8,25,.16);transition:transform .2s ease,box-shadow .2s ease}
+.brand-mark:after{content:"";position:absolute;width:36px;height:36px;border:1px solid rgba(255,255,255,.28);border-radius:50%;right:-16px;top:-17px;z-index:-1}
+.brand-mark:hover{transform:translateY(-2px);box-shadow:0 14px 32px rgba(217,8,25,.22)}
+.brand-mark.small{flex:0 0 auto}
+
+/* Login */
+.login-shell{position:relative;overflow:hidden;background:linear-gradient(145deg,#fff 0%,#fff 67%,#fff7f8 100%)}
+.login-shell:before{content:"";position:absolute;left:-160px;bottom:-230px;width:520px;height:520px;border-radius:50%;border:1px solid rgba(217,8,25,.09);box-shadow:0 0 0 55px rgba(217,8,25,.025),0 0 0 110px rgba(217,8,25,.018);pointer-events:none}
+.login-backdrop-mark{position:absolute;right:-28px;top:50%;transform:translateY(-50%);font-size:clamp(180px,29vw,480px);font-weight:950;line-height:.8;letter-spacing:-.10em;color:rgba(217,8,25,.028);user-select:none;pointer-events:none}
+.login-panel{position:relative;z-index:1}
+.login-card{position:relative;width:min(430px,100%);padding:38px 38px 30px;gap:17px;border:1px solid #e8e8e8;border-radius:22px;box-shadow:0 24px 70px rgba(0,0,0,.075);overflow:hidden;transition:transform .22s ease,box-shadow .22s ease}
+.login-card:hover{transform:translateY(-2px);box-shadow:0 30px 82px rgba(0,0,0,.09)}
+.login-accent{position:absolute;left:0;right:0;top:0;height:4px;background:var(--accent)}
+.login-brand{justify-content:flex-start;margin:0 0 9px}
+.login-brand .brand-mark{width:62px;height:62px;border-radius:16px;font-size:22px}
+.login-brand .brand-name{font-size:26px;line-height:1}
+.login-brand .brand-subtitle{font-size:11px;margin-top:6px;color:#555}
+.login-heading{margin:5px 0 2px}
+.login-heading h2{margin:0;text-align:left;font-size:27px;letter-spacing:-.035em}
+.login-heading p{margin:7px 0 0;color:#6a6a6a;font-size:13px;line-height:1.5}
+.login-card label{font-size:11px;text-transform:uppercase;letter-spacing:.055em}
+.login-card input{padding:13px 13px;border-radius:10px}
+.login-submit{margin-top:3px;min-height:46px;background:var(--accent)!important;border-color:var(--accent)!important;color:#fff!important;box-shadow:0 8px 20px rgba(217,8,25,.14)}
+.login-submit:hover{background:#b90615!important;border-color:#b90615!important;color:#fff!important;transform:translateY(-1px);box-shadow:0 12px 24px rgba(217,8,25,.20)}
+.login-foot{text-align:center;color:#929292;font-size:10px;font-weight:700;letter-spacing:.04em;margin-top:2px}
+.login-foot span{color:var(--accent);padding:0 4px}
+
+/* Sidebar brand and dynamic restaurant name */
+.brand-row{align-items:flex-start;padding:2px 8px 22px}
+.sidebar-brand-copy{padding-top:2px;overflow:hidden}
+.sidebar-brand-copy .brand-name{display:block!important;font-size:16px!important;line-height:1.05;white-space:nowrap}
+.sidebar-brand-copy .brand-subtitle{max-width:150px;font-size:9px;line-height:1.3;white-space:normal}
+.restaurant-context{display:flex!important;align-items:center;gap:6px;margin-top:7px;color:#222;font-size:10px;font-weight:800;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
+.restaurant-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto}
+
+@media(max-width:850px){
+  .brand-row .sidebar-brand-copy{display:none}
+}
+@media(max-width:520px){
+  .login-card{padding:30px 22px 24px;border-radius:18px}
+  .login-brand .brand-mark{width:54px;height:54px;border-radius:14px;font-size:19px}
+  .login-brand .brand-name{font-size:23px}
+  .login-backdrop-mark{display:none}
+  .sidebar{padding:12px 10px}
+  .brand-row{display:flex!important;padding:2px 2px 12px;align-items:center}
+  .brand-row .sidebar-brand-copy{display:block!important}
+  .sidebar-brand-copy .brand-name{font-size:15px!important}
+  .sidebar-brand-copy .brand-subtitle{font-size:8px;max-width:none}
+  .restaurant-context{font-size:9px;margin-top:4px}
+}

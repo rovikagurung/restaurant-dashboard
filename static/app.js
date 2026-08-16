@@ -202,7 +202,7 @@ $('#logoutBtn').addEventListener('click', async()=>{try{await api('/api/logout',
 async function bootstrap(showWelcome=false){
   try {
     const r=await api('/api/me'); me=r.user; settings=r.settings; showApp();
-    $('#restaurantName').textContent=settings.restaurant_name||'Restaurant';
+    $('#restaurantName').textContent=settings.restaurant_name||'Your Restaurant';
     $('#userName').textContent=me.display_name; $('#userRole').textContent=roleLabel(me.role);
     $('#avatar').textContent=(me.display_name||'U').trim().charAt(0).toUpperCase();
     $$('.owner-only').forEach(el=>el.classList.toggle('hidden-role',me.role!=='owner'));
@@ -391,8 +391,8 @@ function renderUpload(){
   <div class="file-box"><strong>Purchase / Expense Excel</strong><input id="purchaseFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Daybook Excel</strong><input id="daybookFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Sales Excel</strong><input id="salesFile" type="file" accept=".xlsx,.xlsm"></div>
-  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx"></a></div>
-  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx"></a></div>
+  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx">Sold Items template</a></div>
+  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx">Inventory template</a></div>
   </div><button class="btn primary" style="margin-top:18px" type="submit">Upload Excel Files</button><div id="uploadStatus" class="mini-stat" style="margin-top:10px"></div></form></section>`;
   $('#uploadForm').addEventListener('submit',handleUpload);
 }
