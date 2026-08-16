@@ -286,6 +286,82 @@ def parse_upload_bytes(content: bytes):
     return parsed["sheet_name"], headers, rows
 
 
+def _has_nonempty_value(rows, key):
+    if not key:
+        return False
+    return any(row.get(key) not in (None, "", "-") for row in rows)
+
+
+def validate_upload_structure(file_type: str, headers, rows):
+    """Reject a workbook when it does not match the selected upload type.
+
+    Validation happens before the file is written to disk or saved to SQLite.
+    The checks intentionally use common aliases so normal restaurant exports keep
+    working while obvious cross-uploads (e.g. Sold Items in the Sales box) fail.
+    """
+    if not headers:
+        raise HTTPException(400, "The workbook has no readable column headers.")
+    if not rows:
+        raise HTTPException(400, "The workbook has no readable data rows.")
+
+    if file_type == "sold_items":
+        item_k = find_key(headers, ["dish name", "menu item", "item name", "food item", "item", "product", "particulars"])
+        qty_k = find_key(headers, ["qty sold", "quantity sold", "qty", "quantity", "units sold", "sold qty", "sold"])
+        amount_k = find_key(headers, ["sales amount", "amount", "net sales", "revenue", "total amount", "sales"])
+        if not (item_k and qty_k and _has_nonempty_value(rows, item_k)):
+            raise HTTPException(400, "Wrong file for Sold Items. Expected columns such as Dish Name and QTY.")
+        if not amount_k:
+            raise HTTPException(400, "Wrong file for Sold Items. An Amount/Sales column is also required.")
+        return
+
+    if file_type == "inventory":
+        item_k = find_key(headers, ["item name", "stock item", "ingredient", "material", "product", "item"])
+        stock_k = find_key(headers, ["closing stock", "closing qty", "available qty", "stock qty", "current stock", "balance qty", "stock"])
+        if not (item_k and stock_k and _has_nonempty_value(rows, item_k)):
+            raise HTTPException(400, "Wrong file for Inventory. Expected Item Name and Current Stock/Closing Stock columns.")
+        return
+
+    if file_type == "purchase":
+        amount_k = find_key(headers, ["TNX Amount (NPR)", "txn amount", "purchase amount", "total amount", "amount"])
+        head_k = find_key(headers, ["account head", "category", "purchase category", "expense head", "expense category"])
+        if not (amount_k and head_k and _has_nonempty_value(rows, head_k)):
+            raise HTTPException(400, "Wrong file for Purchase / Expense. Expected Account Head/Expense Category and Amount columns.")
+        return
+
+    if file_type == "sales":
+        amount_k = find_key(headers, ["TXN AMOUNT (NPR)", "txn amount", "net sales", "net amount", "amount", "grand total", "total amount"])
+        identity_keys = [
+            find_key(headers, ["id", "invoice", "invoice no", "bill no", "ticket no", "voucher no"]),
+            find_key(headers, ["status", "payment status"]),
+            find_key(headers, ["mode", "payment mode", "payment method"]),
+            find_key(headers, ["order type", "service type"]),
+            find_key(headers, ["billed by", "cashier", "staff", "employee"]),
+        ]
+        if not amount_k or not any(identity_keys):
+            raise HTTPException(400, "Wrong file for Sales. Expected a sales amount plus invoice/ticket, payment, order-type, or cashier columns.")
+        return
+
+    if file_type == "daybook":
+        label_k = headers[0] if headers else None
+        recognized = {
+            clean_header("NetSales"), clean_header("Net Sales"),
+            clean_header("Total Receipts"), clean_header("Expenses"),
+            clean_header("Total Payments"), clean_header("Net Receipts"),
+            clean_header("Closing Balance"), clean_header("Difference"),
+            clean_header("Finance - Daybook Difference"),
+        }
+        found = set()
+        if label_k:
+            for row in rows:
+                label = clean_header(row.get(label_k))
+                for target in recognized:
+                    if label == target or (target and target in label):
+                        found.add(target)
+        if len(found) < 2:
+            raise HTTPException(400, "Wrong file for Daybook. Expected Daybook rows such as NetSales, Total Receipts, Expenses, or Closing Balance.")
+        return
+
+
 def fetch_uploads(branch_ids, start=None, end=None, file_type=None):
     q = "SELECT * FROM uploads WHERE branch_id IN (%s)" % ",".join("?" for _ in branch_ids)
     params = list(branch_ids)
@@ -410,7 +486,7 @@ def summarize_sales(uploads, sold_item_uploads=None):
                 x["pct"] = round((x["sales"] / dish_total * 100) if dish_total else 0, 2)
     return {
         "total": round(total, 2), "paid": round(paid, 2), "unpaid": round(unpaid, 2),
-        "bills": len(bills), "avg_bill": round(total / len(bills), 2) if bills else 0,
+        "bills": len(bills), "tickets": len(bills), "avg_bill": round(total / len(bills), 2) if bills else 0,
         "daily": [{"date": k, "value": round(v,2)} for k,v in sorted(daily.items())],
         "order_types": sum_map(order_types), "payment_modes": sum_map(payment_modes), "staff": sum_map(staff),
         "dishes": dish_rows,
@@ -447,7 +523,7 @@ def daybook_value(up, labels):
     headers=up["headers"]
     if not headers: return None
     label_k=headers[0]
-    total_k=find_key(headers,["Total","Total Amount","Net"])
+    total_k=find_key(headers,["Total","Total Amount","Net","Value","Amount"])
     targets=[clean_header(x) for x in labels]
     matched=None
     # Exact normalized match first, then allow the requested label to be contained
@@ -868,18 +944,17 @@ def build_insights(sales, purchase, inventory, branches, management=None):
     if out_items:
         s = settings_dict()
         details = []
-        for item in out_items[:6]:
+        for item in out_items:
             branch_name = s.get(f"branch_{item['branch_id']}_name", f"Branch {item['branch_id']}")
             unit = item.get("unit") or "unit"
             details.append(
                 f"{item['item']} at {branch_name} — order {number(item.get('order_qty')):,.2f} {unit}"
             )
-        if len(out_items) > 6:
-            details.append(f"+{len(out_items)-6} more")
         highlights.append({
             "key": "stock",
             "tone": "danger",
-            "text": "Out of stock and should be ordered: " + "; ".join(details) + ".",
+            "text": "Out-of-stock items that should be ordered:",
+            "items": details,
         })
     else:
         highlights.append({
@@ -970,6 +1045,7 @@ def build_owner_welcome():
         "total_sales": round(number(sales.get("total")), 2),
         "highest_sold_item": best,
         "bills": int(number(sales.get("bills"))),
+        "tickets": int(number(sales.get("tickets", sales.get("bills")))),
         "has_data": bool(today_ups),
     }
 
@@ -980,7 +1056,7 @@ class LoginBody(BaseModel):
     password: str
 
 
-APP_ASSET_VERSION = "9.2"
+APP_ASSET_VERSION = "9.3"
 
 
 @app.middleware("http")
@@ -1118,9 +1194,16 @@ async def upload(request:Request, branch_id:int=Form(...), upload_date:str=Form(
     if ext not in (".xlsx",".xlsm"): raise HTTPException(400,"Please upload an .xlsx or .xlsm file.")
     content=await file.read()
     if len(content)>15*1024*1024: raise HTTPException(400,"File is larger than 15 MB.")
-    try: sheet_name, headers, rows=parse_upload_bytes(content)
-    except Exception as e: raise HTTPException(400,f"Could not read workbook: {e}")
-    if not headers: raise HTTPException(400,"Workbook has no readable table.")
+    try:
+        sheet_name, headers, rows=parse_upload_bytes(content)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400,f"Could not read workbook: {e}")
+    if not headers:
+        raise HTTPException(400,"Workbook has no readable table.")
+    # Critical: validate the selected file type BEFORE writing the file or touching SQLite.
+    validate_upload_structure(file_type, headers, rows)
     safe=re.sub(r"[^A-Za-z0-9._-]+","_",Path(file.filename).name)
     target_dir=UPLOAD_DIR/str(branch_id)/upload_date; target_dir.mkdir(parents=True,exist_ok=True)
     path=target_dir/f"{file_type}_{safe}"; path.write_bytes(content)

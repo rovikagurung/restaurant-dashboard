@@ -51,6 +51,21 @@ function injectEnhancementStyles(){
     .owner-welcome-actions{display:flex;justify-content:flex-end;margin-top:22px}
     .owner-dashboard-btn{border:1px solid #d90819;background:#d90819;color:#fff;border-radius:12px;padding:12px 22px;font-size:14px;font-weight:800;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
     .owner-dashboard-btn:hover{background:#b80615;box-shadow:0 9px 24px rgba(217,8,25,.25);transform:translateY(-2px)}
+    .management-highlight .highlight-list{margin:8px 0 0;padding-left:22px;color:inherit;font-size:13px;line-height:1.6;font-weight:700}
+    .management-highlight .highlight-list li{padding-left:3px;margin:3px 0}
+    .dashboard-link-panel{cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+    .dashboard-link-panel:hover{transform:translateY(-2px);border-color:#d90819;box-shadow:0 10px 28px rgba(0,0,0,.07)}
+    .dashboard-link-panel .panel-head h3::after{content:'  →';color:#d90819;font-weight:900;opacity:.75}
+    .stock-tag{display:inline-flex;align-items:center;justify-content:center;min-width:54px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:850;letter-spacing:.04em;text-transform:uppercase;border:1px solid transparent}
+    .stock-tag.out{background:#fff1f2;color:#d90819;border-color:#f3b6bd}
+    .stock-tag.low{background:#fff7e8;color:#c56a00;border-color:#f1c58e}
+    .stock-tag.ok{background:#effbf2;color:#14823a;border-color:#aedde0}
+    .stock-status-card{border:1px solid #ececec;border-radius:14px;padding:16px;background:#fff}
+    .stock-status-card.out{background:#fff4f5;border-color:#efb5bc;color:#c80818}
+    .stock-status-card.low{background:#fff8ed;border-color:#efc58f;color:#bd6500}
+    .stock-status-card.ok{background:#f2fbf4;border-color:#afe0bc;color:#137c37}
+    .upload-type-tag{display:inline-flex;padding:5px 9px;border-radius:999px;background:#effbf2!important;color:#137c37!important;border:1px solid #afe0bc!important;font-size:11px;font-weight:850}
+    .upload-error{color:#d90819!important;font-weight:750}
     @keyframes welcomeFade{from{opacity:0}to{opacity:1}}
     @keyframes welcomeUp{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
     @media(max-width:760px){
@@ -72,9 +87,13 @@ function managementHighlights(items){
   return `<div class="management-highlights">${items.slice(0,8).map(item=>{
     const obj=typeof item==='string'?{text:item,tone:'neutral'}:item;
     const tone=['success','positive','warning','danger','neutral'].includes(obj.tone)?obj.tone:'neutral';
-    return `<div class="management-highlight ${tone}"><span class="highlight-mark"></span><div class="highlight-text">${esc(obj.text||'')}</div></div>`;
+    const list=Array.isArray(obj.items)&&obj.items.length
+      ? `<ol class="highlight-list">${obj.items.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>`
+      : '';
+    return `<div class="management-highlight ${tone}"><span class="highlight-mark"></span><div class="highlight-text">${esc(obj.text||'')}${list}</div></div>`;
   }).join('')}</div>`;
 }
+
 
 function closeOwnerWelcome(){
   const overlay=$('#ownerWelcomeOverlay');
@@ -107,7 +126,7 @@ async function showOwnerWelcome(force=false){
 
   ownerWelcomeDisplayed=true;
   const best=info?.highest_sold_item;
-  const dateLabel=info?.date_label||info?.date||'Today';
+  const dateLabel=info?.date_label||info?.date||'Date unavailable';
   const noDataNote=info?.has_data===false
     ? `<p class="owner-welcome-note">No restaurant data has been uploaded for this date yet.</p>`
     : '';
@@ -117,24 +136,24 @@ async function showOwnerWelcome(force=false){
       <div class="owner-welcome-card">
         <div class="owner-welcome-accent"></div>
         <button class="owner-welcome-close" id="ownerWelcomeClose" type="button" aria-label="Close welcome summary">×</button>
-        <div class="owner-welcome-kicker">Today's restaurant snapshot</div>
+        <div class="owner-welcome-kicker">Restaurant snapshot</div>
         <h2 class="owner-welcome-title" id="ownerWelcomeTitle">Welcome back!</h2>
-        <p class="owner-welcome-sub">Here is the restaurant performance recorded for today across both branches.</p>
+        <p class="owner-welcome-sub">Restaurant performance across both branches for ${esc(dateLabel)}.</p>
         <div class="owner-welcome-grid">
           <div class="owner-summary-card owner-date-card">
-            <div class="summary-label">Today's date</div>
+            <div class="summary-label">Date</div>
             <div class="summary-value owner-date-value">${esc(dateLabel)}</div>
           </div>
           <div class="owner-summary-card">
-            <div class="summary-label">Pizzas sold today</div>
+            <div class="summary-label">Pizzas sold</div>
             <div class="summary-value">${nf.format(Number(info?.pizza_qty||0))}</div>
           </div>
           <div class="owner-summary-card">
-            <div class="summary-label">Total sales today</div>
+            <div class="summary-label">Total sales</div>
             <div class="summary-value">${money(info?.total_sales||0)}</div>
           </div>
           <div class="owner-summary-card">
-            <div class="summary-label">Highest-selling item today</div>
+            <div class="summary-label">Highest-selling item</div>
             <div class="summary-value">${best?`${esc(best.name)} · ${nf.format(Number(best.qty||0))} sold`:'No sold-item data yet'}</div>
           </div>
         </div>
@@ -237,6 +256,18 @@ function bars(items, formatter=money, limit=8){
   return `<div class="bar-list">${arr.map(x=>`<div class="bar-row"><span title="${esc(x.label)}">${esc(x.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2,(Number(x.value)||0)/max*100)}%"></div></div><span class="bar-val">${esc(formatter(x.value))}</span></div>`).join('')}</div>`;
 }
 function empty(msg){return `<div class="empty">${esc(msg)}</div>`}
+function stockClass(status){const s=String(status||'').toLowerCase();return s==='out'?'out':s==='low'?'low':'ok'}
+function stockLabel(status){const s=stockClass(status);return s==='out'?'OUT':s==='low'?'LOW':'OK'}
+function stockTag(status){const c=stockClass(status);return `<span class="stock-tag ${c}">${stockLabel(c)}</span>`}
+function wireDashboardLinks(){
+  $$('[data-nav-page]', $('#content')).forEach(el=>{
+    el.setAttribute('role','button');
+    el.setAttribute('tabindex','0');
+    const go=()=>navTo(el.dataset.navPage);
+    el.addEventListener('click',go);
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}});
+  });
+}
 
 function renderDashboard(){
   const s=dash.sales,p=dash.purchase,inv=dash.inventory,m=dash.management||{};
@@ -245,6 +276,8 @@ function renderDashboard(){
   const best=m.highest_selling_item||s.dishes?.[0];
   const topOutlet=m.highest_sales_branch;
   const combinedLabel=(dash.branches||[]).length===2?'Both Branch Sales':'Total Sales';
+  const totalTickets=Number(s.tickets??s.bills??0);
+  const okCount=(inv.items||[]).filter(x=>stockClass(x.status)==='ok').length;
   const orderBody=inv.order_list?.length?orderListTable(inv.order_list):empty('No items currently need ordering.');
 
   $('#content').innerHTML=`
@@ -252,31 +285,31 @@ function renderDashboard(){
       ${kpi(combinedLabel,m.combined_sales!=null?money(m.combined_sales):money(s.total))}
       ${kpi('Items Sold',nf.format(s.dish_qty_total||0))}
       ${kpi('Best Seller',best?best.name:'—',best?`${nf.format(best.qty)} sold`:``)}
-      ${kpi('Estimated Cheese Used',`${qty(m.cheese_used_kg||0)} kg`,m.pizza_qty?`${nf.format(m.pizza_qty)} pizzas × 100 g`:'')}
       ${kpi('Order List',nf.format(inv.order_count||0),'Low / out-of-stock items')}
-      ${kpi('Bills',nf.format(s.bills))}
+      ${kpi('TOTAL TICKETS',nf.format(totalTickets))}
     </div>
 
     ${panel('Management Highlights','',managementHighlights(dash.insights||[]))}
 
     <div class="grid-2 equal dashboard-graphs">
-      <section class="panel graph-panel"><div class="panel-head"><h3>Sales Trend</h3></div><div class="chart-wrap"><canvas id="salesTrend"></canvas></div></section>
+      <section class="panel graph-panel dashboard-link-panel" data-nav-page="sales"><div class="panel-head"><h3>Sales Trend</h3></div><div class="chart-wrap"><canvas id="salesTrend"></canvas></div></section>
       <section class="panel graph-panel"><div class="panel-head"><h3>Sales vs Purchase / Expense</h3></div><div class="chart-wrap"><canvas id="salesPurchaseTrend"></canvas></div></section>
     </div>
 
     <div class="grid-2 equal dashboard-graphs">
-      <section class="panel graph-panel"><div class="panel-head"><h3>Top Selling Items</h3></div><div class="chart-wrap chart-wrap-bars"><canvas id="topDishesChart"></canvas></div></section>
-      <section class="panel graph-panel"><div class="panel-head"><h3>Sales by Payment Mode</h3></div><div class="chart-wrap chart-wrap-bars"><canvas id="paymentChart"></canvas></div></section>
+      <section class="panel graph-panel dashboard-link-panel" data-nav-page="sales"><div class="panel-head"><h3>Top Selling Items</h3></div><div class="chart-wrap chart-wrap-bars"><canvas id="topDishesChart"></canvas></div></section>
+      <section class="panel graph-panel dashboard-link-panel" data-nav-page="sales"><div class="panel-head"><h3>Sales by Payment Mode</h3></div><div class="chart-wrap chart-wrap-bars"><canvas id="paymentChart"></canvas></div></section>
     </div>
 
     <div class="grid-2 equal">
       ${panel('Outlet Performance','',topOutlet?`<div class="metric-row"><span>Highest-sales outlet</span><strong>${esc(topOutlet.branch_name)}</strong></div><div class="metric-row"><span>Outlet sales</span><strong>${money(topOutlet.sales)}</strong></div><div class="metric-row"><span>Top item</span><strong>${esc(topOutlet.top_item?.name||'—')}</strong></div>`:empty('No outlet comparison available.'))}
-      ${panel('Inventory Status','',`<div class="status-grid"><div class="status-card"><strong>${inv.out_count||0}</strong><span>Out of stock</span></div><div class="status-card"><strong>${inv.low_count||0}</strong><span>Low stock</span></div><div class="status-card"><strong>${inv.order_count||0}</strong><span>Order items</span></div></div>`)}
+      <section class="panel dashboard-link-panel" data-nav-page="inventory"><div class="panel-head"><h3>Inventory Status</h3></div><div class="status-grid"><div class="stock-status-card out"><strong>${inv.out_count||0}</strong><span>Out of stock</span></div><div class="stock-status-card low"><strong>${inv.low_count||0}</strong><span>Low stock</span></div><div class="stock-status-card ok"><strong>${okCount}</strong><span>OK</span></div></div></section>
     </div>
 
-    ${panel('Order List','',orderBody)}
+    <section class="panel dashboard-link-panel" data-nav-page="inventory"><div class="panel-head"><h3>Order List</h3></div>${orderBody}</section>
     ${panel('Recent Uploads','',uploadTable(dash.recent_uploads,false))}`;
 
+  wireDashboardLinks();
   requestAnimationFrame(()=>{
     drawLineChart($('#salesTrend'),[{name:'Sales',points:s.daily}],['#d90819']);
     drawLineChart($('#salesPurchaseTrend'),[
@@ -298,7 +331,7 @@ function renderSales(){
       ${kpi('Best seller by qty',best?best.name:'—',best?`${nf.format(best.qty)} sold · ${money(best.sales)}`:'')}
       ${kpi('Highest dish sales',high?high.name:'—',high?money(high.sales):'')}
       ${kpi('Lowest seller by qty',low?low.name:'—',low?`${nf.format(low.qty)} sold · ${money(low.sales)}`:'')}
-      ${kpi('Bills',nf.format(s.bills))}
+      ${kpi('TOTAL TICKETS',nf.format(s.tickets??s.bills??0))}
     </div>
     <div class="grid-2"><section class="panel"><div class="panel-head"><h3>Daily sales</h3></div><div class="chart-wrap"><canvas id="salesOnly"></canvas></div></section>${panel('Payment methods','Sales value by mode',bars(s.payment_modes))}</div>
     <div class="grid-2 equal">${panel('Order channels','Revenue by order type',bars(s.order_types))}${panel('Sales by employee','Based on Billed By / Cashier column',bars(s.staff))}</div>
@@ -316,13 +349,14 @@ function renderDaybook(){const d=dash.daybook,l=d.latest||{};$('#content').inner
 
 function orderListTable(items){
   if(!items?.length)return empty('No items currently need ordering.');
-  return `<div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th>Branch</th><th>Item</th><th>Current</th><th>Minimum</th><th>Target</th><th>Order Qty</th><th>Unit</th></tr></thead><tbody>${items.map(x=>`<tr><td><span class="tag ${esc(x.status)}">${esc(x.status)}</span></td><td>${esc(branchName(x.branch_id))}</td><td><strong>${esc(x.item)}</strong></td><td>${qty(x.qty)}</td><td>${x.minimum==null?'—':qty(x.minimum)}</td><td>${x.target==null?'—':qty(x.target)}</td><td><strong>${qty(x.order_qty)}</strong></td><td>${esc(x.unit||'')}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th>Branch</th><th>Item</th><th>Current</th><th>Minimum</th><th>Target</th><th>Order Qty</th><th>Unit</th></tr></thead><tbody>${items.map(x=>`<tr><td>${stockTag(x.status)}</td><td>${esc(branchName(x.branch_id))}</td><td><strong>${esc(x.item)}</strong></td><td>${qty(x.qty)}</td><td>${x.minimum==null?'—':qty(x.minimum)}</td><td>${x.target==null?'—':qty(x.target)}</td><td><strong>${qty(x.order_qty)}</strong></td><td>${esc(x.unit||'')}</td></tr>`).join('')}</tbody></table></div>`;
 }
+
 
 function renderInventory(){
   const inv=dash.inventory,m=dash.management||{};
   const cheeseRows=(m.branches||[]).filter(x=>x.cheese_stock);
-  const cheesePanel=cheeseRows.length?panel('Cheese Usage & Stock','',`<div class="table-wrap"><table class="table"><thead><tr><th>Branch</th><th>Pizzas Sold</th><th>Estimated Cheese Used</th><th>Cheese Stock</th><th>Minimum</th><th>Target</th><th>Needed to Target</th><th>Status</th></tr></thead><tbody>${cheeseRows.map(b=>{const c=b.cheese_stock;return `<tr><td>${esc(b.branch_name)}</td><td>${nf.format(b.pizza_qty)}</td><td>${qty(b.cheese_used_kg)} kg</td><td>${qty(c.current)} ${esc(c.unit)}</td><td>${c.minimum==null?'—':qty(c.minimum)+' '+esc(c.unit)}</td><td>${c.target==null?'—':qty(c.target)+' '+esc(c.unit)}</td><td>${qty(c.needed_to_target)} ${esc(c.unit)}</td><td><span class="tag ${esc(c.status)}">${esc(c.status)}</span></td></tr>`}).join('')}</tbody></table></div>`):'';
+  const cheesePanel=cheeseRows.length?panel('Cheese Usage & Stock','',`<div class="table-wrap"><table class="table"><thead><tr><th>Branch</th><th>Pizzas Sold</th><th>Estimated Cheese Used</th><th>Cheese Stock</th><th>Minimum</th><th>Target</th><th>Needed to Target</th><th>Status</th></tr></thead><tbody>${cheeseRows.map(b=>{const c=b.cheese_stock;return `<tr><td>${esc(b.branch_name)}</td><td>${nf.format(b.pizza_qty)}</td><td>${qty(b.cheese_used_kg)} kg</td><td>${qty(c.current)} ${esc(c.unit)}</td><td>${c.minimum==null?'—':qty(c.minimum)+' '+esc(c.unit)}</td><td>${c.target==null?'—':qty(c.target)+' '+esc(c.unit)}</td><td>${qty(c.needed_to_target)} ${esc(c.unit)}</td><td>${stockTag(c.status)}</td></tr>`}).join('')}</tbody></table></div>`):'';
 
   $('#content').innerHTML=`
     <div class="kpi-grid">
@@ -334,7 +368,7 @@ function renderInventory(){
       ${kpi('Stock Data',inv.has_stock_data?'Active':'—')}
     </div>
     ${cheesePanel}
-    ${inv.has_stock_data?panel('Inventory','',`<div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th>Branch</th><th>Item</th><th>Current</th><th>Minimum</th><th>Target</th><th>Order Qty</th><th>Unit</th><th>Date</th></tr></thead><tbody>${inv.items.map(x=>`<tr><td><span class="tag ${esc(x.status)}">${esc(x.status)}</span></td><td>${esc(branchName(x.branch_id))}</td><td>${esc(x.item)}</td><td>${qty(x.qty)}</td><td>${x.minimum==null?'—':qty(x.minimum)}</td><td>${x.target==null?'—':qty(x.target)}</td><td>${qty(x.order_qty||0)}</td><td>${esc(x.unit)}</td><td>${esc(x.date)}</td></tr>`).join('')}</tbody></table></div>`):empty('No Inventory Excel uploaded for the selected branch/date.')}
+    ${inv.has_stock_data?panel('Inventory','',`<div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th>Branch</th><th>Item</th><th>Current</th><th>Minimum</th><th>Target</th><th>Order Qty</th><th>Unit</th><th>Date</th></tr></thead><tbody>${inv.items.map(x=>`<tr><td>${stockTag(x.status)}</td><td>${esc(branchName(x.branch_id))}</td><td>${esc(x.item)}</td><td>${qty(x.qty)}</td><td>${x.minimum==null?'—':qty(x.minimum)}</td><td>${x.target==null?'—':qty(x.target)}</td><td>${qty(x.order_qty||0)}</td><td>${esc(x.unit)}</td><td>${esc(x.date)}</td></tr>`).join('')}</tbody></table></div>`):empty('No Inventory Excel uploaded for the selected branch/date.')}
     ${panel('Order List','',inv.order_list?.length?orderListTable(inv.order_list):empty('No items currently need ordering.'))}`;
 }
 
@@ -347,7 +381,8 @@ function renderCompare(){
 }
 
 function typeLabel(t){return String(t||'').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}
-function uploadTable(rows,withActions=true){if(!rows?.length)return empty('No uploads yet.');return `<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Type</th><th>File</th><th>Uploaded</th>${withActions?'<th></th>':''}</tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.branch_name)}</td><td><span class="tag ${x.type}">${esc(typeLabel(x.type))}</span></td><td>${esc(x.name)}</td><td>${esc((x.uploaded_at||'').replace('T',' '))}</td>${withActions?`<td><button class="btn danger delete-upload" data-id="${x.id}">Delete</button></td>`:''}</tr>`).join('')}</tbody></table></div>`}
+function uploadTable(rows,withActions=true){if(!rows?.length)return empty('No uploads yet.');return `<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Type</th><th>File</th>${withActions?'<th></th>':''}</tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.branch_name)}</td><td><span class="upload-type-tag">${esc(typeLabel(x.type))}</span></td><td>${esc(x.name)}</td>${withActions?`<td><button class="btn danger delete-upload" data-id="${x.id}">Delete</button></td>`:''}</tr>`).join('')}</tbody></table></div>`}
+
 
 
 function renderUpload(){
@@ -356,8 +391,8 @@ function renderUpload(){
   <div class="file-box"><strong>Purchase / Expense Excel</strong><input id="purchaseFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Daybook Excel</strong><input id="daybookFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Sales Excel</strong><input id="salesFile" type="file" accept=".xlsx,.xlsm"></div>
-  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx"></a></div>
-  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx"></a></div>
+  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx">Sold Items template</a></div>
+  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx">Inventory template</a></div>
   </div><button class="btn primary" style="margin-top:18px" type="submit">Upload Excel Files</button><div id="uploadStatus" class="mini-stat" style="margin-top:10px"></div></form></section>`;
   $('#uploadForm').addEventListener('submit',handleUpload);
 }
@@ -370,7 +405,18 @@ async function handleUpload(e){
   for(const [type,file] of files){
     const fd=new FormData();fd.append('branch_id',$('#upBranch').value);fd.append('upload_date',$('#upDate').value);fd.append('file_type',type);fd.append('file',file);
     $('#uploadStatus').textContent=`Uploading ${typeLabel(type)}...`;
-    try{const r=await api('/api/upload',{method:'POST',body:fd});done++;$('#uploadStatus').textContent=`${typeLabel(type)}: ${r.rows} rows parsed successfully.`}catch(err){toast(`${typeLabel(type)}: ${err.message}`,true);return}
+    try{
+      const r=await api('/api/upload',{method:'POST',body:fd});
+      done++;
+      $('#uploadStatus').classList.remove('upload-error');
+      $('#uploadStatus').textContent=`${typeLabel(type)}: ${r.rows} rows parsed successfully.`;
+    }catch(err){
+      const msg=`${typeLabel(type)}: ${err.message} The file was not uploaded.`;
+      $('#uploadStatus').classList.add('upload-error');
+      $('#uploadStatus').textContent=msg;
+      toast(msg,true);
+      return;
+    }
   }
   toast(`${done} Excel file(s) uploaded successfully`);
 }
