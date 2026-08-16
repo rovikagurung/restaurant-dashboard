@@ -11,7 +11,8 @@ import shutil
 import sqlite3
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +33,26 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Restaurant Command Center")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
+
+# Recipe / management assumptions.
+# One pizza uses 100 g = 0.10 kg of cheese.
+PIZZA_CHEESE_KG_PER_ITEM = 0.10
+CHEESE_ITEM_WORDS = ("mozzarella", "cheese")
+APP_TIMEZONE = ZoneInfo("Asia/Kathmandu")
+
+
+def local_today_iso():
+    return datetime.now(APP_TIMEZONE).date().isoformat()
+
+
+def date_obj(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except Exception:
+        return None
+
 
 SECRET_PATH = DATA_DIR / ".session_secret"
 if SECRET_PATH.exists():
@@ -85,7 +106,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 branch_id INTEGER NOT NULL,
                 upload_date TEXT NOT NULL,
-                file_type TEXT NOT NULL CHECK(file_type IN ('purchase','daybook','sales','sold_items')),
+                file_type TEXT NOT NULL CHECK(file_type IN ('purchase','daybook','sales','sold_items','inventory')),
                 original_name TEXT NOT NULL,
                 stored_path TEXT,
                 sheet_name TEXT,
@@ -120,7 +141,7 @@ def init_db():
         )
         # Upgrade older databases so Sold Items can be stored as a fourth Excel type.
         upload_sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='uploads'").fetchone()
-        if upload_sql and "sold_items" not in (upload_sql["sql"] or ""):
+        if upload_sql and ("sold_items" not in (upload_sql["sql"] or "") or "inventory" not in (upload_sql["sql"] or "")):
             conn.executescript(
                 """
                 ALTER TABLE uploads RENAME TO uploads_legacy;
@@ -128,7 +149,7 @@ def init_db():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     branch_id INTEGER NOT NULL,
                     upload_date TEXT NOT NULL,
-                    file_type TEXT NOT NULL CHECK(file_type IN ('purchase','daybook','sales','sold_items')),
+                    file_type TEXT NOT NULL CHECK(file_type IN ('purchase','daybook','sales','sold_items','inventory')),
                     original_name TEXT NOT NULL,
                     stored_path TEXT,
                     sheet_name TEXT,
@@ -481,78 +502,477 @@ def summarize_daybook(uploads):
 
 
 def inventory_from_uploads(uploads, branch_ids):
-    # Use the newest row-based stock file available for each selected branch.
+    """Return the newest inventory snapshot for each selected branch.
+
+    Expected columns (common aliases are accepted):
+      Item Name | Current Stock | Minimum Stock | Target Stock | Unit
+
+    Target Stock is optional. If it is missing, the target defaults to
+    2 × Minimum Stock. The order list is created only for LOW/OUT items.
+    """
     candidates=[]
     for branch_id in branch_ids:
         branch_candidates=[]
         branch_uploads=[u for u in uploads if u["branch_id"]==branch_id]
-        for up in sorted(branch_uploads, key=lambda x:(x["upload_date"],x["id"]), reverse=True):
+        inventory_uploads=[u for u in branch_uploads if u["file_type"]=="inventory"]
+        stock_sources=inventory_uploads if inventory_uploads else branch_uploads
+
+        for up in sorted(stock_sources, key=lambda x:(x["upload_date"],x["id"]), reverse=True):
             h=up["headers"]
             item_k=find_key(h,["item name","stock item","ingredient","material","product","item"])
             stock_k=find_key(h,["closing stock","closing qty","available qty","stock qty","current stock","balance qty","stock"])
             min_k=find_key(h,["minimum qty","min stock","reorder level","reorder qty","minimum stock"])
+            target_k=find_key(h,["target stock","desired stock","maximum stock","max stock","par stock","ideal stock"])
             unit_k=find_key(h,["unit","uom"])
-            if item_k and stock_k:
-                for row in up["rows"]:
-                    item=row.get(item_k)
-                    if item in (None,"", "-"): continue
-                    branch_candidates.append({"branch_id":up["branch_id"],"item":str(item).strip(),"qty":number(row.get(stock_k)),"minimum":number(row.get(min_k)) if min_k else None,"unit":str(row.get(unit_k) or "") if unit_k else "","date":up["upload_date"]})
-                if branch_candidates: break
+            if not (item_k and stock_k):
+                continue
+
+            for row in up["rows"]:
+                item=row.get(item_k)
+                if item in (None,"", "-"):
+                    continue
+                min_raw=row.get(min_k) if min_k else None
+                target_raw=row.get(target_k) if target_k else None
+                minimum=None if min_raw in (None,"") else number(min_raw)
+                target=None if target_raw in (None,"") else number(target_raw)
+                branch_candidates.append({
+                    "branch_id":up["branch_id"],
+                    "item":str(item).strip(),
+                    "qty":number(row.get(stock_k)),
+                    "minimum":minimum,
+                    "target":target,
+                    "unit":str(row.get(unit_k) or "") if unit_k else "",
+                    "date":up["upload_date"],
+                })
+            if branch_candidates:
+                break
         candidates.extend(branch_candidates)
-    # Merge user-set thresholds when the sheet itself lacks them.
+
+    # Merge manually saved minimum thresholds when Excel does not provide them.
     with db() as conn:
-        th={ (r["branch_id"],r["item_name"].lower()):(r["minimum_qty"],r["unit"] or "") for r in conn.execute("SELECT * FROM stock_thresholds WHERE branch_id IN (%s)" % ",".join("?" for _ in branch_ids), branch_ids) }
+        placeholders=",".join("?" for _ in branch_ids)
+        rows=conn.execute(
+            f"SELECT * FROM stock_thresholds WHERE branch_id IN ({placeholders})",
+            branch_ids,
+        )
+        thresholds={
+            (r["branch_id"],r["item_name"].lower()):(r["minimum_qty"],r["unit"] or "")
+            for r in rows
+        }
+
     alerts=[]
+    order_list=[]
     for r in candidates:
         if r["minimum"] is None:
-            t=th.get((r["branch_id"],r["item"].lower()))
-            if t: r["minimum"], r["unit"] = t[0], r["unit"] or t[1]
+            t=thresholds.get((r["branch_id"],r["item"].lower()))
+            if t:
+                r["minimum"],r["unit"]=t[0],r["unit"] or t[1]
+
+        # If Target Stock is not supplied, use twice the minimum as a practical par level.
+        if r["target"] is None and r["minimum"] is not None:
+            r["target"]=round(max(r["minimum"],r["minimum"]*2),2)
+        elif r["target"] is not None and r["minimum"] is not None:
+            r["target"]=max(r["target"],r["minimum"])
+
         if r["minimum"] is not None:
-            if r["qty"] <= 0: status="out"
-            elif r["qty"] <= r["minimum"]: status="low"
-            else: status="ok"
-        else: status="unknown"
+            if r["qty"] <= 0:
+                status="out"
+            elif r["qty"] <= r["minimum"]:
+                status="low"
+            else:
+                status="ok"
+        else:
+            status="unknown"
+
         r["status"]=status
+        r["order_qty"]=round(max((r["target"] or 0)-r["qty"],0),2) if status in ("low","out") else 0
         alerts.append(r)
-    alerts.sort(key=lambda x: (0 if x["status"]=="out" else 1 if x["status"]=="low" else 2, x["branch_id"], x["qty"]))
-    return {"items":alerts,"has_stock_data":bool(candidates),"low_count":sum(1 for x in alerts if x["status"] in ("low","out")),"out_count":sum(1 for x in alerts if x["status"]=="out")}
+        if status in ("low","out"):
+            order_list.append(dict(r))
+
+    rank={"out":0,"low":1,"ok":2,"unknown":3}
+    alerts.sort(key=lambda x:(rank.get(x["status"],9),x["branch_id"],x["item"].lower()))
+    order_list.sort(key=lambda x:(rank.get(x["status"],9),x["branch_id"],-x["order_qty"],x["item"].lower()))
+    return {
+        "items":alerts,
+        "order_list":order_list,
+        "has_stock_data":bool(candidates),
+        "low_count":sum(1 for x in alerts if x["status"] in ("low","out")),
+        "out_count":sum(1 for x in alerts if x["status"]=="out"),
+        "order_count":len(order_list),
+    }
+
+
+def calculate_ingredient_usage(sales):
+    """Estimate cheese usage from Sold Items / dish sales.
+
+    Current rule: every dish whose name contains 'pizza' uses 0.10 kg cheese.
+    This is an estimate for management planning, not a stock ledger deduction.
+    """
+    pizza_qty=0.0
+    pizza_sales=0.0
+    pizza_items=[]
+    for dish in sales.get("dishes",[]):
+        name=str(dish.get("name") or "")
+        if "pizza" in name.lower():
+            qty=number(dish.get("qty"))
+            amount=number(dish.get("sales"))
+            pizza_qty+=qty
+            pizza_sales+=amount
+            pizza_items.append({"name":name,"qty":round(qty,2),"sales":round(amount,2)})
+    return {
+        "pizza_qty":round(pizza_qty,2),
+        "pizza_sales":round(pizza_sales,2),
+        "cheese_used_kg":round(pizza_qty*PIZZA_CHEESE_KG_PER_ITEM,2),
+        "cheese_per_pizza_kg":PIZZA_CHEESE_KG_PER_ITEM,
+        "pizza_items":pizza_items,
+    }
+
+
+def find_cheese_stock(inventory, branch_id=None):
+    items=inventory.get("items",[]) if inventory else []
+    if branch_id is not None:
+        items=[x for x in items if x.get("branch_id")==branch_id]
+    matches=[]
+    for item in items:
+        n=clean_header(item.get("item"))
+        score=0
+        if "mozzarella" in n:
+            score=2
+        elif "cheese" in n:
+            score=1
+        if score:
+            matches.append((score,item))
+    if not matches:
+        return None
+    matches.sort(key=lambda x:(-x[0],x[1].get("item","").lower()))
+    return matches[0][1]
 
 
 def branch_metrics(branch_id, start=None, end=None):
     ups=fetch_uploads([branch_id],start,end)
+    sales=summarize_sales(
+        [u for u in ups if u["file_type"]=="sales"],
+        [u for u in ups if u["file_type"]=="sold_items"],
+    )
+    inventory=inventory_from_uploads(ups,[branch_id])
     return {
         "branch_id":branch_id,
-        "sales":summarize_sales([u for u in ups if u["file_type"]=="sales"], [u for u in ups if u["file_type"]=="sold_items"]),
+        "sales":sales,
         "purchase":summarize_purchase([u for u in ups if u["file_type"]=="purchase"]),
         "daybook":summarize_daybook([u for u in ups if u["file_type"]=="daybook"]),
+        "inventory":inventory,
+        "ingredient_usage":calculate_ingredient_usage(sales),
     }
 
 
-def build_insights(sales,purchase,inventory,branches):
-    insights=[]
-    if sales["total"]:
-        insights.append(f"Total sales recorded: NPR {sales['total']:,.0f} from {sales['bills']} bills; average bill NPR {sales['avg_bill']:,.0f}.")
-    if sales["unpaid"]:
-        pct=sales["unpaid"]/sales["total"]*100 if sales["total"] else 0
-        insights.append(f"Unpaid/due sales are NPR {sales['unpaid']:,.0f} ({pct:.1f}% of recorded sales).")
-    if sales["payment_modes"]:
-        top=sales["payment_modes"][0]
-        insights.append(f"Top payment mode by value is {top['label']} at NPR {top['value']:,.0f}.")
-    if purchase["heads"]:
-        top=purchase["heads"][0]
-        insights.append(f"Largest purchase/expense head is {top['label']} at NPR {top['value']:,.0f}.")
-    if sales["dishes"]:
-        insights.append(f"Best-selling dish by quantity is {sales['dishes'][0]['name']} ({sales['dishes'][0]['qty']:,.0f} units).")
-        if len(sales["dishes"])>1:
-            low=sales["dishes"][-1]; insights.append(f"Lowest-selling listed dish is {low['name']} ({low['qty']:,.0f} units).")
-    if inventory["out_count"]: insights.append(f"{inventory['out_count']} inventory item(s) are out of stock.")
-    elif inventory["low_count"]: insights.append(f"{inventory['low_count']} inventory item(s) are at/below minimum stock.")
-    if len(branches)==2 and (branches[0]["sales"]["total"] or branches[1]["sales"]["total"]):
-        lead=max(branches,key=lambda b:b["sales"]["total"]); other=min(branches,key=lambda b:b["sales"]["total"])
-        diff=lead["sales"]["total"]-other["sales"]["total"]
-        s=settings_dict(); name=s[f"branch_{lead['branch_id']}_name"]
-        insights.append(f"{name} currently leads branch sales by NPR {diff:,.0f} in the selected period.")
-    return insights[:7]
+def build_management(sales, inventory, branches):
+    """Structured management facts used by dashboard highlights and owner welcome."""
+    s = settings_dict()
+    dishes = sales.get("dishes", []) or []
+    positive = [x for x in dishes if number(x.get("qty")) > 0]
+    highest_qty = max(positive, key=lambda x: (number(x.get("qty")), number(x.get("sales")))) if positive else None
+    lowest_qty = min(positive, key=lambda x: (number(x.get("qty")), number(x.get("sales")))) if positive else None
+    highest_revenue = max(positive, key=lambda x: number(x.get("sales"))) if positive else None
+
+    usage = calculate_ingredient_usage(sales)
+    combined_sales = round(sum(number(b.get("sales", {}).get("total")) for b in branches), 2)
+
+    branch_summary = []
+    cheese_remaining_total = 0.0
+    cheese_remaining_known = False
+
+    for b in branches:
+        b_dishes = b.get("sales", {}).get("dishes", []) or []
+        b_positive = [x for x in b_dishes if number(x.get("qty")) > 0]
+        b_top = max(b_positive, key=lambda x: (number(x.get("qty")), number(x.get("sales")))) if b_positive else None
+        b_low = min(b_positive, key=lambda x: (number(x.get("qty")), number(x.get("sales")))) if b_positive else None
+
+        inv = b.get("inventory", {})
+        cheese = find_cheese_stock(inv, b.get("branch_id"))
+        cheese_usage = b.get("ingredient_usage", {}).get("cheese_used_kg", 0)
+        cheese_detail = None
+
+        if cheese:
+            cheese_remaining_known = True
+            cheese_remaining_total += number(cheese.get("qty"))
+            cheese_detail = {
+                "item": cheese.get("item"),
+                "current": round(number(cheese.get("qty")), 2),
+                "minimum": cheese.get("minimum"),
+                "target": cheese.get("target"),
+                "unit": cheese.get("unit") or "kg",
+                "status": cheese.get("status"),
+                "order_qty": round(number(cheese.get("order_qty")), 2),
+                "needed_to_target": round(max(number(cheese.get("target")) - number(cheese.get("qty")), 0), 2) if cheese.get("target") is not None else 0,
+            }
+
+        branch_summary.append({
+            "branch_id": b.get("branch_id"),
+            "branch_name": s.get(f"branch_{b.get('branch_id')}_name", f"Branch {b.get('branch_id')}"),
+            "sales": round(number(b.get("sales", {}).get("total")), 2),
+            "items_sold": round(number(b.get("sales", {}).get("dish_qty_total")), 2),
+            "top_item": b_top,
+            "lowest_item": b_low,
+            "pizza_qty": round(number(b.get("ingredient_usage", {}).get("pizza_qty")), 2),
+            "cheese_used_kg": round(number(cheese_usage), 2),
+            "cheese_stock": cheese_detail,
+            "low_stock_count": inv.get("low_count", 0),
+            "out_stock_count": inv.get("out_count", 0),
+        })
+
+    highest_sales_branch = max(branch_summary, key=lambda x: x["sales"]) if branch_summary else None
+
+    daily_map = {
+        date_obj(x.get("date")): number(x.get("value"))
+        for x in sales.get("daily", [])
+        if date_obj(x.get("date"))
+    }
+    latest_date = max(daily_map.keys()) if daily_map else None
+    week_comparison = None
+    weekday_comparison = None
+
+    if latest_date:
+        last_week_start = latest_date - timedelta(days=6)
+        previous_week_end = last_week_start - timedelta(days=1)
+        previous_week_start = previous_week_end - timedelta(days=6)
+        last_week_sales = sum(value for day, value in daily_map.items() if last_week_start <= day <= latest_date)
+        previous_week_sales = sum(value for day, value in daily_map.items() if previous_week_start <= day <= previous_week_end)
+        change_pct = ((last_week_sales - previous_week_sales) / previous_week_sales) * 100 if previous_week_sales else None
+
+        week_comparison = {
+            "latest_date": latest_date.isoformat(),
+            "current_start": last_week_start.isoformat(),
+            "current_end": latest_date.isoformat(),
+            "previous_start": previous_week_start.isoformat(),
+            "previous_end": previous_week_end.isoformat(),
+            "current_sales": round(last_week_sales, 2),
+            "previous_sales": round(previous_week_sales, 2),
+            "change_pct": round(change_pct, 2) if change_pct is not None else None,
+        }
+
+        same_weekdays = sorted(
+            [(day, value) for day, value in daily_map.items()
+             if day.year == latest_date.year and day.month == latest_date.month and day.weekday() == latest_date.weekday()],
+            key=lambda x: x[0]
+        )
+        if same_weekdays:
+            values = [x[1] for x in same_weekdays]
+            current_value = daily_map.get(latest_date, 0)
+            max_value = max(values)
+            sorted_desc = sorted(values, reverse=True)
+            rank = sorted_desc.index(current_value) + 1 if current_value in sorted_desc else None
+            weekday_comparison = {
+                "weekday": latest_date.strftime("%A"),
+                "date": latest_date.isoformat(),
+                "sales": round(current_value, 2),
+                "count": len(same_weekdays),
+                "highest_sales": round(max_value, 2),
+                "is_highest": abs(current_value - max_value) < 0.005,
+                "rank": rank,
+            }
+
+    out_items = [x for x in inventory.get("order_list", []) if x.get("status") == "out"]
+
+    return {
+        "combined_sales": combined_sales,
+        "highest_sales_branch": highest_sales_branch,
+        "highest_selling_item": highest_qty,
+        "lowest_selling_item": lowest_qty,
+        "highest_revenue_item": highest_revenue,
+        "pizza_qty": usage["pizza_qty"],
+        "cheese_used_kg": usage["cheese_used_kg"],
+        "cheese_remaining_kg": round(cheese_remaining_total, 2) if cheese_remaining_known else None,
+        "cheese_per_pizza_kg": usage["cheese_per_pizza_kg"],
+        "branches": branch_summary,
+        "order_list": inventory.get("order_list", []),
+        "out_of_stock_order_list": out_items,
+        "order_count": inventory.get("order_count", 0),
+        "week_comparison": week_comparison,
+        "weekday_comparison": weekday_comparison,
+    }
+
+def build_insights(sales, purchase, inventory, branches, management=None):
+    """Return exactly eight owner-focused management highlights."""
+    management = management or build_management(sales, inventory, branches)
+    highlights = []
+
+    # 1. Last 7 days versus the previous 7 days.
+    week = management.get("week_comparison")
+    if week and week.get("previous_sales"):
+        change = week.get("change_pct") or 0
+        direction = "higher" if change >= 0 else "lower"
+        highlights.append({
+            "key": "week",
+            "tone": "positive" if change >= 0 else "warning",
+            "text": (
+                f"Last week's sales were NPR {week['current_sales']:,.0f}, "
+                f"{abs(change):.1f}% {direction} than the previous week "
+                f"(NPR {week['previous_sales']:,.0f})."
+            ),
+        })
+    elif week:
+        highlights.append({
+            "key": "week",
+            "tone": "neutral",
+            "text": (
+                f"Last week's sales were NPR {week['current_sales']:,.0f}. "
+                "Previous-week data is not available for comparison."
+            ),
+        })
+    else:
+        highlights.append({
+            "key": "week",
+            "tone": "neutral",
+            "text": "Weekly sales comparison is not available yet because there is not enough dated sales history.",
+        })
+
+    # 2. Compare the latest weekday with all occurrences of the same weekday in that month.
+    weekday = management.get("weekday_comparison")
+    if weekday and weekday.get("is_highest"):
+        highlights.append({
+            "key": "weekday",
+            "tone": "success",
+            "text": (
+                f"This {weekday['weekday']} recorded the highest {weekday['weekday']} sales "
+                f"of the month at NPR {weekday['sales']:,.0f}."
+            ),
+        })
+    elif weekday:
+        rank = weekday.get("rank")
+        rank_text = f"ranked #{rank}" if rank else "was recorded"
+        highlights.append({
+            "key": "weekday",
+            "tone": "neutral",
+            "text": (
+                f"This {weekday['weekday']} {rank_text} among {weekday['count']} "
+                f"{weekday['weekday']}s this month, with sales of NPR {weekday['sales']:,.0f}."
+            ),
+        })
+    else:
+        highlights.append({
+            "key": "weekday",
+            "tone": "neutral",
+            "text": "Same-weekday monthly comparison is not available yet because there is not enough dated sales history.",
+        })
+
+    # 3. Total pizzas sold.
+    highlights.append({
+        "key": "pizza",
+        "tone": "neutral",
+        "text": f"Total pizzas sold: {management.get('pizza_qty', 0):,.0f} across the selected branches.",
+    })
+
+    # 4. Only out-of-stock items are treated as urgent order alerts.
+    out_items = management.get("out_of_stock_order_list", [])
+    if out_items:
+        s = settings_dict()
+        details = []
+        for item in out_items[:6]:
+            branch_name = s.get(f"branch_{item['branch_id']}_name", f"Branch {item['branch_id']}")
+            unit = item.get("unit") or "unit"
+            details.append(
+                f"{item['item']} at {branch_name} — order {number(item.get('order_qty')):,.2f} {unit}"
+            )
+        if len(out_items) > 6:
+            details.append(f"+{len(out_items)-6} more")
+        highlights.append({
+            "key": "stock",
+            "tone": "danger",
+            "text": "Out of stock and should be ordered: " + "; ".join(details) + ".",
+        })
+    else:
+        highlights.append({
+            "key": "stock",
+            "tone": "success",
+            "text": "No inventory items are currently marked out of stock.",
+        })
+
+    # 5. Combined sales.
+    branch_count = len(management.get("branches", []))
+    highlights.append({
+        "key": "sales",
+        "tone": "neutral",
+        "text": (
+            f"Total sales of both branches: NPR {management.get('combined_sales', 0):,.0f}."
+            if branch_count == 2
+            else f"Total sales for the selected branch: NPR {management.get('combined_sales', 0):,.0f}."
+        ),
+    })
+
+    # 6. Highest-sales outlet.
+    top_outlet = management.get("highest_sales_branch")
+    highlights.append({
+        "key": "outlet",
+        "tone": "neutral",
+        "text": (
+            f"Highest-sales outlet: {top_outlet['branch_name']} with sales of NPR {number(top_outlet.get('sales')):,.0f}."
+            if top_outlet and number(top_outlet.get("sales")) > 0
+            else "Highest-sales outlet: no branch sales data is available for the selected period."
+        ),
+    })
+
+    # 7. Best-selling item.
+    best = management.get("highest_selling_item")
+    highlights.append({
+        "key": "best",
+        "tone": "neutral",
+        "text": (
+            f"Best-selling item: {best['name']} with {number(best.get('qty')):,.0f} sold."
+            if best
+            else "Best-selling item: no sold-item data is available."
+        ),
+    })
+
+    # 8. Cheese usage and remaining inventory.
+    remaining = management.get("cheese_remaining_kg")
+    remaining_text = (
+        f"{remaining:,.2f} kg remaining in current inventory"
+        if remaining is not None
+        else "remaining cheese stock is not available"
+    )
+    highlights.append({
+        "key": "cheese",
+        "tone": "danger",
+        "text": (
+            f"Estimated cheese consumed: {management.get('cheese_used_kg', 0):,.2f} kg; "
+            f"{remaining_text}."
+        ),
+    })
+
+    return highlights[:8]
+
+
+
+def build_owner_welcome():
+    """Return only today's owner snapshot across both branches."""
+    today = local_today_iso()
+    today_date = date_obj(today)
+    today_ups = fetch_uploads([1, 2], today, today)
+    sales = summarize_sales(
+        [u for u in today_ups if u["file_type"] == "sales"],
+        [u for u in today_ups if u["file_type"] == "sold_items"],
+    )
+    usage = calculate_ingredient_usage(sales)
+
+    dishes = [x for x in sales.get("dishes", []) if number(x.get("qty")) > 0]
+    best = max(
+        dishes,
+        key=lambda x: (number(x.get("qty")), number(x.get("sales"))),
+    ) if dishes else None
+
+    s = settings_dict()
+    return {
+        "date": today,
+        "date_label": today_date.strftime("%A, %d %B %Y") if today_date else today,
+        "restaurant_name": s.get("restaurant_name", "Restaurant"),
+        "pizza_qty": round(number(usage.get("pizza_qty")), 2),
+        "total_sales": round(number(sales.get("total")), 2),
+        "highest_sold_item": best,
+        "bills": int(number(sales.get("bills"))),
+        "has_data": bool(today_ups),
+    }
+
 
 
 class LoginBody(BaseModel):
@@ -560,15 +980,50 @@ class LoginBody(BaseModel):
     password: str
 
 
+APP_ASSET_VERSION = "9.2"
+
+
+@app.middleware("http")
+async def disable_ui_cache(request: Request, call_next):
+    response = await call_next(request)
+    # Avoid stale dashboard JavaScript after GitHub/Railway redeploys.
+    if request.url.path in ("/", "/static/app.js"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return (BASE / "templates" / "index.html").read_text(encoding="utf-8")
+    html = (BASE / "templates" / "index.html").read_text(encoding="utf-8")
+    # Existing templates may still reference an older ?v=6 asset. Replace it
+    # dynamically so users always receive the current JavaScript after deploy.
+    html = re.sub(
+        r'/static/app\.js(?:\?v=[^"\']+)?',
+        f'/static/app.js?v={APP_ASSET_VERSION}',
+        html,
+    )
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/sold-items-template.xlsx")
 def sold_items_template():
     path = SAMPLE_DIR / "Sold-Items-Sample.xlsx"
     return FileResponse(path, filename="Sold-Items-Template.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.get("/inventory-template.xlsx")
+def inventory_template():
+    path = SAMPLE_DIR / "Inventory-Sample.xlsx"
+    return FileResponse(path, filename="Inventory-Template.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.post("/api/login")
@@ -594,34 +1049,71 @@ def me(request:Request):
     return {"user":user,"settings":s}
 
 
+@app.get("/api/owner-welcome")
+def owner_welcome(request: Request):
+    user = current_user(request)
+    if user["role"] != "owner":
+        raise HTTPException(403, "Owner only.")
+    return build_owner_welcome()
+
+
 @app.get("/api/dashboard")
 def dashboard(request:Request, branch:str="all", start:Optional[str]=None, end:Optional[str]=None):
     user=current_user(request)
-    if user["role"]!="owner": branch_ids=[user["branch_id"]]
-    elif branch=="all": branch_ids=[1,2]
+    if user["role"]!="owner":
+        branch_ids=[user["branch_id"]]
+    elif branch=="all":
+        branch_ids=[1,2]
     else:
         bid=int(branch)
-        if bid not in (1,2): raise HTTPException(400,"Invalid branch.")
+        if bid not in (1,2):
+            raise HTTPException(400,"Invalid branch.")
         branch_ids=[bid]
+
     ups=fetch_uploads(branch_ids,start,end)
-    sales=summarize_sales([u for u in ups if u["file_type"]=="sales"], [u for u in ups if u["file_type"]=="sold_items"])
+    sales=summarize_sales(
+        [u for u in ups if u["file_type"]=="sales"],
+        [u for u in ups if u["file_type"]=="sold_items"],
+    )
     purchase=summarize_purchase([u for u in ups if u["file_type"]=="purchase"])
     daybook=summarize_daybook([u for u in ups if u["file_type"]=="daybook"])
     inventory=inventory_from_uploads(ups,branch_ids)
+
     branches=[branch_metrics(b,start,end) for b in branch_ids]
-    # for owner all, ensure both branch comparison records even if no uploads
-    if user["role"]=="owner" and branch=="all": branches=[branch_metrics(1,start,end),branch_metrics(2,start,end)]
+    if user["role"]=="owner" and branch=="all":
+        branches=[branch_metrics(1,start,end),branch_metrics(2,start,end)]
+
+    management=build_management(sales,inventory,branches)
     s=settings_dict()
-    recent=[{"id":u["id"],"branch_id":u["branch_id"],"branch_name":s[f"branch_{u['branch_id']}_name"],"date":u["upload_date"],"type":u["file_type"],"name":u["original_name"],"uploaded_at":u["uploaded_at"],"source":"excel"} for u in ups]
+    recent=[{
+        "id":u["id"],
+        "branch_id":u["branch_id"],
+        "branch_name":s[f"branch_{u['branch_id']}_name"],
+        "date":u["upload_date"],
+        "type":u["file_type"],
+        "name":u["original_name"],
+        "uploaded_at":u["uploaded_at"],
+        "source":"excel",
+    } for u in ups]
     recent=sorted(recent,key=lambda x:x["uploaded_at"],reverse=True)[:12]
-    return {"sales":sales,"purchase":purchase,"daybook":daybook,"inventory":inventory,"branches":branches,"insights":build_insights(sales,purchase,inventory,branches),"recent_uploads":recent,"settings":s}
+    return {
+        "sales":sales,
+        "purchase":purchase,
+        "daybook":daybook,
+        "inventory":inventory,
+        "branches":branches,
+        "management":management,
+        "insights":build_insights(sales,purchase,inventory,branches,management),
+        "recent_uploads":recent,
+        "settings":s,
+    }
 
 
 @app.post("/api/upload")
 async def upload(request:Request, branch_id:int=Form(...), upload_date:str=Form(...), file_type:str=Form(...), file:UploadFile=File(...)):
     user=current_user(request)
     if branch_id not in (1,2) or not can_access_branch(user,branch_id): raise HTTPException(403,"You cannot upload for this branch.")
-    if file_type not in ("purchase","daybook","sales","sold_items"): raise HTTPException(400,"Invalid file type.")
+    if file_type not in ("purchase","daybook","sales","sold_items","inventory"): raise HTTPException(400,"Invalid file type.")
     ext=Path(file.filename or "").suffix.lower()
     if ext not in (".xlsx",".xlsm"): raise HTTPException(400,"Please upload an .xlsx or .xlsm file.")
     content=await file.read()
@@ -674,7 +1166,7 @@ def delete_upload(upload_id:int, request:Request):
 def load_samples(request:Request):
     user=current_user(request)
     if user["role"]!="owner": raise HTTPException(403,"Owner only.")
-    samples=[("purchase","2026-08-06","Purchase-Expense-Sample.xlsx"),("daybook","2026-07-19","Daybook-Sample.xlsx"),("sales","2026-08-07","Sales-Sample.xlsx"),("sold_items","2026-08-07","Sold-Items-Sample.xlsx")]
+    samples=[("purchase","2026-08-06","Purchase-Expense-Sample.xlsx"),("daybook","2026-07-19","Daybook-Sample.xlsx"),("sales","2026-08-07","Sales-Sample.xlsx"),("sold_items","2026-08-07","Sold-Items-Sample.xlsx"),("inventory","2026-08-07","Inventory-Sample.xlsx")]
     loaded=[]
     for typ,date,name in samples:
         p=SAMPLE_DIR/name; content=p.read_bytes(); sheet,headers,rows=parse_upload_bytes(content)
@@ -765,4 +1257,4 @@ def health(): return {"ok":True}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("app:app", host="0.0.0.0", port=int(os.environ.get("PORT", "8000")), reload=False)
