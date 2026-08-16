@@ -1063,14 +1063,14 @@ class LoginBody(BaseModel):
     password: str
 
 
-APP_ASSET_VERSION = "9.4"
+APP_ASSET_VERSION = "9.6"
 
 
 @app.middleware("http")
 async def disable_ui_cache(request: Request, call_next):
     response = await call_next(request)
     # Avoid stale dashboard JavaScript after GitHub/Railway redeploys.
-    if request.url.path in ("/", "/static/app.js"):
+    if request.url.path in ("/", "/static/app.js", "/static/styles.css"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -1082,6 +1082,11 @@ def home():
     html = (BASE / "templates" / "index.html").read_text(encoding="utf-8")
     # Existing templates may still reference an older ?v=6 asset. Replace it
     # dynamically so users always receive the current JavaScript after deploy.
+    html = re.sub(
+        r'/static/styles\.css(?:\?v=[^"\']+)?',
+        f'/static/styles.css?v={APP_ASSET_VERSION}',
+        html,
+    )
     html = re.sub(
         r'/static/app\.js(?:\?v=[^"\']+)?',
         f'/static/app.js?v={APP_ASSET_VERSION}',

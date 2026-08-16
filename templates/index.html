@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#ffffff" />
   <title>RestoSight — Operational Intelligence Dashboard</title>
-  <link rel="stylesheet" href="/static/styles.css?v=9.4" />
+  <link rel="stylesheet" href="/static/styles.css?v=9.6" />
 </head>
 <body>
   <div id="toast" class="toast"></div>
@@ -37,12 +37,10 @@
 
   <div id="appView" class="app-shell hidden">
     <aside class="sidebar">
-      <div class="brand-row brand-lockup">
+      <div class="brand-row brand-lockup dashboard-restaurant-brand">
         <div class="brand-mark small">RS</div>
         <div class="brand-copy sidebar-brand-copy">
-          <strong class="brand-name">RestoSight</strong>
-          <small class="brand-subtitle">Operational Intelligence Dashboard</small>
-          <small class="restaurant-context"><span class="restaurant-dot"></span><span id="restaurantName">Your Restaurant</span></small>
+          <strong class="brand-name restaurant-brand-name" id="restaurantName">Your Restaurant</strong>
         </div>
       </div>
       <nav id="nav">
@@ -77,6 +75,6 @@
     </main>
   </div>
 
-  <script src="/static/app.js?v=9.4"></script>
+  <script src="/static/app.js?v=9.6"></script>
 </body>
 </html>

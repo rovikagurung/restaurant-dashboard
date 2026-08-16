@@ -106,8 +106,8 @@ a{color:#000;text-decoration:none;transition:.15s}a:hover{color:var(--accent)}
 .sidebar-brand-copy{padding-top:2px;overflow:hidden}
 .sidebar-brand-copy .brand-name{display:block!important;font-size:16px!important;line-height:1.05;white-space:nowrap}
 .sidebar-brand-copy .brand-subtitle{max-width:150px;font-size:9px;line-height:1.3;white-space:normal}
-.restaurant-context{display:flex!important;align-items:center;gap:7px;margin-top:8px;color:#111;font-size:14px;font-weight:900;line-height:1.25;white-space:normal;overflow-wrap:anywhere}
-.restaurant-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto}
+.restaurant-context{display:flex!important;align-items:flex-start;gap:7px;margin-top:8px;color:#000;font-size:16px;font-weight:900;line-height:1.05;letter-spacing:-.035em;white-space:normal;overflow-wrap:anywhere}
+.restaurant-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto;margin-top:5px}
 
 @media(max-width:850px){
   .brand-row .sidebar-brand-copy{display:none}
@@ -122,5 +122,19 @@ a{color:#000;text-decoration:none;transition:.15s}a:hover{color:var(--accent)}
   .brand-row .sidebar-brand-copy{display:block!important}
   .sidebar-brand-copy .brand-name{font-size:15px!important}
   .sidebar-brand-copy .brand-subtitle{font-size:8px;max-width:none}
-  .restaurant-context{font-size:11px;margin-top:5px}
+  .restaurant-context{font-size:15px;margin-top:6px}
+}
+
+
+/* Dashboard restaurant identity — v9.6 */
+.dashboard-restaurant-brand{align-items:center;padding:2px 8px 22px}
+.dashboard-restaurant-brand .sidebar-brand-copy{padding-top:0;min-width:0}
+.dashboard-restaurant-brand .restaurant-brand-name{display:block!important;font-size:16px!important;font-weight:900;line-height:1.08;letter-spacing:-.035em;color:#000;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:850px){
+  .dashboard-restaurant-brand .sidebar-brand-copy{display:none}
+}
+@media(max-width:520px){
+  .dashboard-restaurant-brand{display:flex!important;padding:2px 2px 12px;align-items:center}
+  .dashboard-restaurant-brand .sidebar-brand-copy{display:block!important}
+  .dashboard-restaurant-brand .restaurant-brand-name{font-size:15px!important}
 }
