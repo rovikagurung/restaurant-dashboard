@@ -352,7 +352,7 @@ def validate_upload_structure(file_type: str, headers, rows):
         label_k = headers[0] if headers else None
         recognized = {
             clean_header("NetSales"), clean_header("Net Sales"),
-            clean_header("Total Receipts"), clean_header("Expenses"),
+            clean_header("Total Receipts"), clean_header("Credit"), clean_header("Credit Sales"), clean_header("Expenses"),
             clean_header("Total Payments"), clean_header("Net Receipts"),
             clean_header("Closing Balance"), clean_header("Difference"),
             clean_header("Finance - Daybook Difference"),
@@ -562,21 +562,36 @@ def daybook_value(up, labels):
 def summarize_daybook(uploads):
     daily=[]
     for up in uploads:
+        net_sales=daybook_value(up,["NetSales","Net Sales"])
+        receipts=daybook_value(up,["Total Receipts"])
+        expenses=daybook_value(up,["Expenses"])
+        payments=daybook_value(up,["Total Payments"])
+        net_receipts=daybook_value(up,["Net Receipts"])
+        closing_balance=daybook_value(up,["Closing Balance"])
+        difference=daybook_value(up,["Difference","Finance - Daybook Difference"])
+        credit=daybook_value(up,["Credit","Credit Sales","Credit / Due","Due Sales","Outstanding Sales"])
+
+        # If the Daybook does not contain a dedicated Credit row, derive the
+        # uncollected portion of sales from Net Sales minus Total Receipts.
+        if credit is None and net_sales is not None and receipts is not None:
+            credit=max(number(net_sales)-number(receipts),0.0)
+
         daily.append({
             "date":up["upload_date"],"branch_id":up["branch_id"],
-            "net_sales":daybook_value(up,["NetSales","Net Sales"]),
-            "receipts":daybook_value(up,["Total Receipts"]),
-            "expenses":daybook_value(up,["Expenses"]),
-            "payments":daybook_value(up,["Total Payments"]),
-            "net_receipts":daybook_value(up,["Net Receipts"]),
-            "closing_balance":daybook_value(up,["Closing Balance"]),
-            "difference":daybook_value(up,["Difference"]),
+            "net_sales":net_sales,
+            "receipts":receipts,
+            "expenses":expenses,
+            "credit":credit,
+            "payments":payments,
+            "net_receipts":net_receipts,
+            "closing_balance":closing_balance,
+            "difference":difference,
         })
     if daily:
         latest_date=max(x["date"] for x in daily)
         latest_rows=[x for x in daily if x["date"]==latest_date]
         latest={"date":latest_date,"branch_id":latest_rows[0]["branch_id"] if len(latest_rows)==1 else None}
-        for key in ("net_sales","receipts","expenses","payments","net_receipts","closing_balance","difference"):
+        for key in ("net_sales","receipts","credit","expenses","payments","net_receipts","closing_balance","difference"):
             vals=[x[key] for x in latest_rows if x.get(key) is not None]
             latest[key]=sum(vals) if vals else None
     else:
@@ -680,7 +695,7 @@ def inventory_from_uploads(uploads, branch_ids):
         "items":alerts,
         "order_list":order_list,
         "has_stock_data":bool(candidates),
-        "low_count":sum(1 for x in alerts if x["status"] in ("low","out")),
+        "low_count":sum(1 for x in alerts if x["status"]=="low"),
         "out_count":sum(1 for x in alerts if x["status"]=="out"),
         "order_count":len(order_list),
     }
@@ -1017,7 +1032,7 @@ def build_insights(sales, purchase, inventory, branches, management=None):
         "key": "cheese",
         "tone": "danger",
         "text": (
-            f"Estimated cheese consumed: {management.get('cheese_used_kg', 0):,.2f} kg; "
+            f"Cheese consumed: {management.get('cheese_used_kg', 0):,.2f} kg; "
             f"{remaining_text}."
         ),
     })
@@ -1027,13 +1042,13 @@ def build_insights(sales, purchase, inventory, branches, management=None):
 
 
 def build_owner_welcome():
-    """Return only today's owner snapshot across both branches."""
-    today = local_today_iso()
-    today_date = date_obj(today)
-    today_ups = fetch_uploads([1, 2], today, today)
+    """Return the previous local business-date snapshot across both branches."""
+    snapshot_date_obj = datetime.now(APP_TIMEZONE).date() - timedelta(days=1)
+    snapshot_date = snapshot_date_obj.isoformat()
+    snapshot_ups = fetch_uploads([1, 2], snapshot_date, snapshot_date)
     sales = summarize_sales(
-        [u for u in today_ups if u["file_type"] == "sales"],
-        [u for u in today_ups if u["file_type"] == "sold_items"],
+        [u for u in snapshot_ups if u["file_type"] == "sales"],
+        [u for u in snapshot_ups if u["file_type"] == "sold_items"],
     )
     usage = calculate_ingredient_usage(sales)
 
@@ -1045,15 +1060,15 @@ def build_owner_welcome():
 
     s = settings_dict()
     return {
-        "date": today,
-        "date_label": today_date.strftime("%A, %d %B %Y") if today_date else today,
+        "date": snapshot_date,
+        "date_label": snapshot_date_obj.strftime("%A, %d %B %Y"),
         "restaurant_name": s.get("restaurant_name", "Restaurant"),
         "pizza_qty": round(number(usage.get("pizza_qty")), 2),
         "total_sales": round(number(sales.get("total")), 2),
         "highest_sold_item": best,
         "bills": int(number(sales.get("bills"))),
         "tickets": int(number(sales.get("tickets", sales.get("bills")))),
-        "has_data": bool(today_ups),
+        "has_data": bool(snapshot_ups),
     }
 
 
@@ -1063,7 +1078,7 @@ class LoginBody(BaseModel):
     password: str
 
 
-APP_ASSET_VERSION = "9.6"
+APP_ASSET_VERSION = "9.7"
 
 
 @app.middleware("http")

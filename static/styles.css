@@ -138,3 +138,40 @@ a{color:#000;text-decoration:none;transition:.15s}a:hover{color:var(--accent)}
   .dashboard-restaurant-brand .sidebar-brand-copy{display:block!important}
   .dashboard-restaurant-brand .restaurant-brand-name{font-size:15px!important}
 }
+
+
+/* V9.7 KPI alignment and Daybook emphasis */
+.kpi-grid .kpi{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center}
+.kpi-grid .kpi .label,.kpi-grid .kpi .value,.kpi-grid .kpi .sub{text-align:center;width:100%}
+.kpi.kpi-positive{background:#f2fbf4;border-color:#a9ddb8}
+.kpi.kpi-positive .label,.kpi.kpi-positive .value{color:#137c37!important}
+.kpi.kpi-positive:hover:after{background:#137c37}
+.kpi.kpi-positive:hover .label,.kpi.kpi-positive:hover .value{color:#137c37!important}
+.kpi.kpi-danger{background:#fff3f4;border-color:#efb4ba}
+.kpi.kpi-danger .label,.kpi.kpi-danger .value{color:#d90819!important}
+.kpi.kpi-danger:hover:after{background:#d90819}
+.kpi.kpi-danger:hover .label,.kpi.kpi-danger:hover .value{color:#d90819!important}
+.daybook-expense{color:#d90819;font-weight:800}
+.daybook-credit{font-weight:750;color:#333}
+.daybook-positive{color:#137c37;font-weight:750}
+
+/* V9.8 — center top KPI boxes as a group */
+.kpi-grid{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:stretch;
+  gap:12px;
+}
+.kpi-grid .kpi{
+  flex:0 1 220px;
+  width:220px;
+  max-width:220px;
+}
+@media(max-width:520px){
+  .kpi-grid .kpi{
+    flex:1 1 100%;
+    width:100%;
+    max-width:none;
+  }
+}

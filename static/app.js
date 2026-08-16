@@ -111,10 +111,10 @@ async function showOwnerWelcome(force=false){
     info=await api('/api/owner-welcome');
   }catch(err){
     console.warn('Owner welcome API unavailable:',err);
-    const now=new Date();
+    const snapshotDate=new Date(Date.now()-24*60*60*1000);
     const dateLabel=new Intl.DateTimeFormat('en-GB',{
       timeZone:'Asia/Kathmandu',weekday:'long',day:'numeric',month:'long',year:'numeric'
-    }).format(now);
+    }).format(snapshotDate);
     info={
       date_label:dateLabel,
       pizza_qty:0,
@@ -248,7 +248,7 @@ async function getDashboard(){
   const q=new URLSearchParams({branch:$('#branchFilter').value}); if($('#startDate').value)q.set('start',$('#startDate').value);if($('#endDate').value)q.set('end',$('#endDate').value);
   return api('/api/dashboard?'+q.toString());
 }
-function kpi(label,value,sub=''){return `<div class="kpi"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="sub">${esc(sub)}</div></div>`}
+function kpi(label,value,sub='',extraClass=''){return `<div class="kpi ${esc(extraClass)}"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="sub">${esc(sub)}</div></div>`}
 function panel(title,sub,body){return `<section class="panel"><div class="panel-head"><h3>${esc(title)}</h3></div>${body}</section>`}
 function bars(items, formatter=money, limit=8){
   if(!items?.length)return `<div class="empty">No data available</div>`;
@@ -322,14 +322,13 @@ function renderDashboard(){
 }
 
 function renderSales(){
-  const s=dash.sales, best=s.dishes?.[0], low=s.dishes?.length?s.dishes[s.dishes.length-1]:null, high=s.dishes?.length?[...s.dishes].sort((a,b)=>Number(b.sales||0)-Number(a.sales||0))[0]:null;
+  const s=dash.sales, best=s.dishes?.[0], low=s.dishes?.length?s.dishes[s.dishes.length-1]:null;
   const source=s.dish_source==='sold_items'?'Sold Items Excel':s.dish_source==='sales_excel'?'Sales Excel':'Waiting for item data';
   $('#content').innerHTML=`
     <div class="kpi-grid">
       ${kpi('Total sales',money(s.total))}
       ${kpi('Food / items sold',nf.format(s.dish_qty_total||0),source)}
       ${kpi('Best seller by qty',best?best.name:'—',best?`${nf.format(best.qty)} sold · ${money(best.sales)}`:'')}
-      ${kpi('Highest dish sales',high?high.name:'—',high?money(high.sales):'')}
       ${kpi('Lowest seller by qty',low?low.name:'—',low?`${nf.format(low.qty)} sold · ${money(low.sales)}`:'')}
       ${kpi('TOTAL TICKETS',nf.format(s.tickets??s.bills??0))}
     </div>
@@ -343,9 +342,23 @@ function dishTable(items){
   return `<div class="table-wrap"><table class="table dish-table"><thead><tr><th>Rank</th><th>Dish Name</th><th>QTY</th><th>Amount</th><th>% of Dish Sales</th></tr></thead><tbody>${items.map((x,i)=>`<tr><td class="rank">#${String(i+1).padStart(2,'0')}</td><td><strong>${esc(x.name)}</strong></td><td>${nf.format(x.qty)} Sold</td><td>${money(x.sales)}</td><td><strong>${Number(x.pct ?? (totalSales?x.sales/totalSales*100:0)).toFixed(2)}%</strong></td></tr>`).join('')}</tbody></table></div>`
 }
 
-function renderPurchase(){const p=dash.purchase;$('#content').innerHTML=`<div class="kpi-grid">${kpi('Total Purchase / Expense',money(p.total),'From uploaded purchase file')}${kpi('Top Head',p.heads[0]?.label||'—',p.heads[0]?money(p.heads[0].value):'')}${kpi('Cost Categories',nf.format(p.heads.length))}${kpi('Payment Accounts',nf.format(p.accounts.length))}${kpi('Uploaded Lines',nf.format(p.lines.length),p.lines.length===30?'Showing latest sample of lines':'')}${kpi('Period',($('#startDate').value||'All')+' → '+($('#endDate').value||'All'))}</div><div class="grid-2"><section class="panel"><div class="panel-head"><h3>Purchase / expense trend</h3></div><div class="chart-wrap"><canvas id="purchaseTrend"></canvas></div></section>${panel('Expense heads','Account Head distribution',bars(p.heads))}</div>${panel('Purchase / expense lines','Recent parsed rows',p.lines.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Account head</th><th>Remarks</th><th>Amount</th></tr></thead><tbody>${p.lines.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(branchName(x.branch_id))}</td><td>${esc(x.head)}</td><td>${esc(x.remarks)}</td><td>${money(x.amount)}</td></tr>`).join('')}</tbody></table></div>`:empty('No purchase / expense data uploaded.'))}`;requestAnimationFrame(()=>drawLineChart($('#purchaseTrend'),[{name:'Purchase / Expense',points:p.daily}],['#d90819']))}
+function renderPurchase(){const p=dash.purchase;$('#content').innerHTML=`<div class="kpi-grid">${kpi('Total Purchase / Expense',money(p.total))}${kpi('Top Expense Head',p.heads[0]?.label||'—',p.heads[0]?money(p.heads[0].value):'')}${kpi('Uploaded Expense Heads',nf.format(p.heads.length))}${kpi('Period',($('#startDate').value||'All')+' → '+($('#endDate').value||'All'))}</div><div class="grid-2"><section class="panel"><div class="panel-head"><h3>Purchase / expense trend</h3></div><div class="chart-wrap"><canvas id="purchaseTrend"></canvas></div></section>${panel('Expense heads','Account Head distribution',bars(p.heads))}</div>${panel('Uploaded Expenses','',p.lines.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Account head</th><th>Remarks</th><th>Amount</th></tr></thead><tbody>${p.lines.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(branchName(x.branch_id))}</td><td>${esc(x.head)}</td><td>${esc(x.remarks)}</td><td>${money(x.amount)}</td></tr>`).join('')}</tbody></table></div>`:empty('No purchase / expense data uploaded.'))}`;requestAnimationFrame(()=>drawLineChart($('#purchaseTrend'),[{name:'Purchase / Expense',points:p.daily}],['#d90819']))}
 
-function renderDaybook(){const d=dash.daybook,l=d.latest||{};$('#content').innerHTML=`<div class="kpi-grid">${kpi('Net Sales',l.net_sales!=null?money(l.net_sales):'—','Latest selected daybook')}${kpi('Total Receipts',l.receipts!=null?money(l.receipts):'—')}${kpi('Expenses',l.expenses!=null?money(l.expenses):'—')}${kpi('Net Receipts',l.net_receipts!=null?money(l.net_receipts):'—')}${kpi('Closing Balance',l.closing_balance!=null?money(l.closing_balance):'—')}${kpi('Finance Difference',l.difference!=null?money(l.difference):'—')}</div>${panel('Daybook history','Extracted from standard daybook labels',d.daily.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Net Sales</th><th>Receipts</th><th>Expenses</th><th>Net Receipts</th><th>Closing</th><th>Difference</th></tr></thead><tbody>${d.daily.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(branchName(x.branch_id))}</td><td>${x.net_sales==null?'—':money(x.net_sales)}</td><td>${x.receipts==null?'—':money(x.receipts)}</td><td>${x.expenses==null?'—':money(x.expenses)}</td><td>${x.net_receipts==null?'—':money(x.net_receipts)}</td><td>${x.closing_balance==null?'—':money(x.closing_balance)}</td><td>${x.difference==null?'—':money(x.difference)}</td></tr>`).join('')}</tbody></table></div>`:empty('No Daybook file uploaded for this filter.'))}`}
+function bracketMoney(v){return v==null?'—':`(${money(v)})`}
+
+function renderDaybook(){
+  const d=dash.daybook,l=d.latest||{};
+  $('#content').innerHTML=`
+    <div class="kpi-grid">
+      ${kpi('Net Sales',l.net_sales!=null?money(l.net_sales):'—','Latest selected daybook')}
+      ${kpi('Total Receipts',l.receipts!=null?money(l.receipts):'—')}
+      ${kpi('Credit',l.credit!=null?money(l.credit):'—')}
+      ${kpi('Expenses',l.expenses!=null?money(l.expenses):'—','','kpi-danger')}
+      ${kpi('Net Receipts',l.net_receipts!=null?money(l.net_receipts):'—','','kpi-positive')}
+      ${kpi('Closing Balance',l.closing_balance!=null?money(l.closing_balance):'—','','kpi-positive')}
+    </div>
+    ${panel('Daybook history','',d.daily.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Net Sales</th><th>Receipts</th><th>Expenses</th><th>Credit</th><th>Net Receipts</th><th>Closing</th></tr></thead><tbody>${d.daily.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(branchName(x.branch_id))}</td><td>${x.net_sales==null?'—':money(x.net_sales)}</td><td>${x.receipts==null?'—':money(x.receipts)}</td><td class="daybook-expense">${bracketMoney(x.expenses)}</td><td class="daybook-credit">${bracketMoney(x.credit)}</td><td class="daybook-positive">${x.net_receipts==null?'—':money(x.net_receipts)}</td><td class="daybook-positive"><strong>${x.closing_balance==null?'—':money(x.closing_balance)}</strong></td></tr>`).join('')}</tbody></table></div>`:empty('No Daybook file uploaded for this filter.'))}`;
+}
 
 function orderListTable(items){
   if(!items?.length)return empty('No items currently need ordering.');
@@ -375,13 +388,13 @@ function renderInventory(){
 function renderCompare(){
   const b=dash.branches||[];
   if(b.length<2){$('#content').innerHTML=empty('Branch comparison unavailable for this account.');return}
-  const card=x=>`<div class="branch-card"><h3>${esc(branchName(x.branch_id))}</h3><div class="metric-row"><span>Total sales</span><strong>${money(x.sales.total)}</strong></div><div class="metric-row"><span>Food / items sold</span><strong>${nf.format(x.sales.dish_qty_total||0)}</strong></div><div class="metric-row"><span>Best seller</span><strong>${esc(x.sales.dishes?.[0]?.name||'—')}</strong></div><div class="metric-row"><span>Estimated cheese used</span><strong>${qty(x.ingredient_usage?.cheese_used_kg||0)} kg</strong></div><div class="metric-row"><span>Low / out stock</span><strong>${nf.format(x.inventory?.low_count||0)}</strong></div><div class="metric-row"><span>Purchase / expense</span><strong>${money(x.purchase.total)}</strong></div></div>`;
+  const card=x=>`<div class="branch-card"><h3>${esc(branchName(x.branch_id))}</h3><div class="metric-row"><span>Total sales</span><strong>${money(x.sales.total)}</strong></div><div class="metric-row"><span>Food / items sold</span><strong>${nf.format(x.sales.dish_qty_total||0)}</strong></div><div class="metric-row"><span>Best seller</span><strong>${esc(x.sales.dishes?.[0]?.name||'—')}</strong></div><div class="metric-row"><span>Estimated cheese used</span><strong>${qty(x.ingredient_usage?.cheese_used_kg||0)} kg</strong></div><div class="metric-row"><span>Low stock</span><strong>${nf.format(x.inventory?.low_count||0)}</strong></div><div class="metric-row"><span>Purchase / expense</span><strong>${money(x.purchase.total)}</strong></div></div>`;
   $('#content').innerHTML=`<div class="compare-cards">${b.map(card).join('')}</div><div class="grid-2"><section class="panel"><div class="panel-head"><h3>Branch sales trend</h3></div><div class="chart-wrap"><canvas id="compareTrend"></canvas></div></section>${panel('Sales comparison','',bars(b.map(x=>({label:branchName(x.branch_id),value:x.sales.total}))))}</div>`;
   requestAnimationFrame(()=>drawLineChart($('#compareTrend'),b.map(x=>({name:branchName(x.branch_id),points:x.sales.daily})),['#d90819','#111111']));
 }
 
 function typeLabel(t){return String(t||'').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}
-function uploadTable(rows,withActions=true){if(!rows?.length)return empty('No uploads yet.');return `<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Type</th><th>File</th>${withActions?'<th></th>':''}</tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.branch_name)}</td><td><span class="upload-type-tag">${esc(typeLabel(x.type))}</span></td><td>${esc(x.name)}</td>${withActions?`<td><button class="btn danger delete-upload" data-id="${x.id}">Delete</button></td>`:''}</tr>`).join('')}</tbody></table></div>`}
+function uploadTable(rows,withActions=true){if(!rows?.length)return empty('No uploads yet.');return `<div class="table-wrap"><table class="table"><thead><tr><th>Branch</th><th>Type</th><th>File</th>${withActions?'<th></th>':''}</tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.branch_name)}</td><td><span class="upload-type-tag">${esc(typeLabel(x.type))}</span></td><td>${esc(x.name)}</td>${withActions?`<td><button class="btn danger delete-upload" data-id="${x.id}">Delete</button></td>`:''}</tr>`).join('')}</tbody></table></div>`}
 
 
 
