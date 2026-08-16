@@ -1,0 +1,19 @@
+MAC QUICK START
+===============
+
+1. Open the restaurant_dashboard folder.
+2. Double-click START_MAC.command
+   OR open Terminal in this folder and run:
+      ./start_mac_linux.sh
+3. Open http://127.0.0.1:8000
+
+Daily workflow:
+1) Purchase / Expense Excel
+2) Daybook Excel
+3) Sales Excel
+4) Sold Items Excel
+
+No Tesseract, Homebrew OCR, or food-sales photos are required.
+
+Recommended Sold Items columns:
+Rank | Dish Name | QTY | Amount | % of Sales

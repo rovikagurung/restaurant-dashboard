@@ -1,10 +1,161 @@
 const $ = (s, p=document) => p.querySelector(s);
 const $$ = (s, p=document) => [...p.querySelectorAll(s)];
 let me = null, settings = {}, dash = null, currentPage = 'dashboard';
+let ownerWelcomeDisplayed = false;
 const nf = new Intl.NumberFormat('en-IN', {maximumFractionDigits: 0});
+const nf2 = new Intl.NumberFormat('en-IN', {maximumFractionDigits: 2});
 const money = v => 'NPR ' + nf.format(Number(v||0));
+const qty = v => nf2.format(Number(v||0));
 const esc = s => String(s??'').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
+function injectEnhancementStyles(){
+  if($('#v9EnhancementStyles')) return;
+  const style=document.createElement('style');
+  style.id='v9EnhancementStyles';
+  style.textContent=`
+    .management-highlights{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .management-highlight{position:relative;display:flex;gap:12px;align-items:flex-start;padding:15px 16px;border:1px solid #ececec;border-radius:14px;background:#fff;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+    .management-highlight:hover{transform:translateY(-2px);border-color:#d90819;box-shadow:0 10px 28px rgba(0,0,0,.07)}
+    .management-highlight .highlight-mark{width:9px;min-width:9px;height:9px;border-radius:999px;margin-top:6px;background:#111}
+    .management-highlight .highlight-text{color:#111;font-size:14px;line-height:1.55;font-weight:600}
+    .management-highlight.success{border-color:#b9e6c6;background:#f5fff8}
+    .management-highlight.success .highlight-mark{background:#138a3d}
+    .management-highlight.success .highlight-text{color:#0c6b2e}
+    .management-highlight.positive{border-color:#cce8d4;background:#f8fff9}
+    .management-highlight.positive .highlight-mark{background:#138a3d}
+    .management-highlight.warning{border-color:#f0d5ad;background:#fffaf3}
+    .management-highlight.warning .highlight-mark{background:#b46b00}
+    .management-highlight.danger{border-color:#f2bcc2;background:#fff7f8}
+    .management-highlight.danger .highlight-mark{background:#d90819}
+    .management-highlight.danger .highlight-text{color:#b60716}
+    .owner-welcome-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(10,10,10,.52);backdrop-filter:blur(7px);animation:welcomeFade .18s ease-out}
+    .owner-welcome-card{width:min(760px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:24px;border:1px solid rgba(217,8,25,.16);box-shadow:0 28px 80px rgba(0,0,0,.22);padding:28px;position:relative;animation:welcomeUp .24s ease-out}
+    .owner-welcome-accent{height:5px;position:absolute;left:0;right:0;top:0;background:#d90819;border-radius:24px 24px 0 0}
+    .owner-welcome-close{position:absolute;right:18px;top:18px;width:36px;height:36px;border:1px solid #e7e7e7;border-radius:50%;background:#fff;color:#111;font-size:22px;line-height:1;cursor:pointer;transition:.18s ease}
+    .owner-welcome-close:hover{color:#fff;background:#d90819;border-color:#d90819;transform:rotate(4deg)}
+    .owner-welcome-kicker{font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#d90819;margin-bottom:8px}
+    .owner-welcome-title{font-size:30px;line-height:1.1;color:#111;margin:0 50px 7px 0;font-weight:850}
+    .owner-welcome-sub{margin:0 0 22px;color:#666;font-size:14px}
+    .owner-welcome-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .owner-summary-card{border:1px solid #ededed;border-radius:16px;padding:17px;background:#fff;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+    .owner-summary-card:hover{transform:translateY(-3px);border-color:#d90819;box-shadow:0 12px 28px rgba(0,0,0,.07)}
+    .owner-summary-card .summary-label{font-size:12px;color:#6b6b6b;text-transform:uppercase;letter-spacing:.07em;font-weight:750;margin-bottom:7px}
+    .owner-summary-card .summary-value{font-size:23px;color:#111;font-weight:850;line-height:1.2}
+    .owner-order-card{grid-column:1/-1;border-color:#f1c2c7;background:#fff8f9}
+    .owner-order-card .summary-value{font-size:15px;color:#a90614;line-height:1.55}
+    .owner-order-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .owner-order-chip{display:inline-flex;padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #efc0c5;color:#9e0714;font-size:12px;font-weight:750}
+    .owner-date-card{grid-column:1/-1;background:#fff;border-color:#f0c6ca}
+    .owner-date-card .owner-date-value{font-size:19px;color:#d90819}
+    .owner-welcome-note{margin:14px 0 0;padding:11px 13px;border-radius:12px;background:#fafafa;border:1px solid #ececec;color:#666;font-size:13px;line-height:1.45}
+    .owner-welcome-actions{display:flex;justify-content:flex-end;margin-top:22px}
+    .owner-dashboard-btn{border:1px solid #d90819;background:#d90819;color:#fff;border-radius:12px;padding:12px 22px;font-size:14px;font-weight:800;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
+    .owner-dashboard-btn:hover{background:#b80615;box-shadow:0 9px 24px rgba(217,8,25,.25);transform:translateY(-2px)}
+    @keyframes welcomeFade{from{opacity:0}to{opacity:1}}
+    @keyframes welcomeUp{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+    @media(max-width:760px){
+      .management-highlights{grid-template-columns:1fr}
+      .owner-welcome-overlay{padding:12px;align-items:flex-end}
+      .owner-welcome-card{border-radius:22px 22px 0 0;padding:24px 18px 20px;max-height:92vh}
+      .owner-welcome-title{font-size:26px}
+      .owner-welcome-grid{grid-template-columns:1fr}
+      .owner-order-card{grid-column:auto}
+      .owner-dashboard-btn{width:100%}
+    }
+  `;
+  document.head.appendChild(style);
+}
+injectEnhancementStyles();
+
+function managementHighlights(items){
+  if(!items?.length) return empty('No management highlights are available for this period.');
+  return `<div class="management-highlights">${items.slice(0,8).map(item=>{
+    const obj=typeof item==='string'?{text:item,tone:'neutral'}:item;
+    const tone=['success','positive','warning','danger','neutral'].includes(obj.tone)?obj.tone:'neutral';
+    return `<div class="management-highlight ${tone}"><span class="highlight-mark"></span><div class="highlight-text">${esc(obj.text||'')}</div></div>`;
+  }).join('')}</div>`;
+}
+
+function closeOwnerWelcome(){
+  const overlay=$('#ownerWelcomeOverlay');
+  if(overlay) overlay.remove();
+}
+
+async function showOwnerWelcome(force=false){
+  if(me?.role!=='owner') return;
+  if(ownerWelcomeDisplayed && !force) return;
+
+  closeOwnerWelcome();
+
+  let info=null;
+  try{
+    info=await api('/api/owner-welcome');
+  }catch(err){
+    console.warn('Owner welcome API unavailable:',err);
+    const now=new Date();
+    const dateLabel=new Intl.DateTimeFormat('en-GB',{
+      timeZone:'Asia/Kathmandu',weekday:'long',day:'numeric',month:'long',year:'numeric'
+    }).format(now);
+    info={
+      date_label:dateLabel,
+      pizza_qty:0,
+      total_sales:0,
+      highest_sold_item:null,
+      has_data:false
+    };
+  }
+
+  ownerWelcomeDisplayed=true;
+  const best=info?.highest_sold_item;
+  const dateLabel=info?.date_label||info?.date||'Today';
+  const noDataNote=info?.has_data===false
+    ? `<p class="owner-welcome-note">No restaurant data has been uploaded for this date yet.</p>`
+    : '';
+
+  document.body.insertAdjacentHTML('beforeend',`
+    <div class="owner-welcome-overlay" id="ownerWelcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="ownerWelcomeTitle">
+      <div class="owner-welcome-card">
+        <div class="owner-welcome-accent"></div>
+        <button class="owner-welcome-close" id="ownerWelcomeClose" type="button" aria-label="Close welcome summary">×</button>
+        <div class="owner-welcome-kicker">Today's restaurant snapshot</div>
+        <h2 class="owner-welcome-title" id="ownerWelcomeTitle">Welcome back!</h2>
+        <p class="owner-welcome-sub">Here is the restaurant performance recorded for today across both branches.</p>
+        <div class="owner-welcome-grid">
+          <div class="owner-summary-card owner-date-card">
+            <div class="summary-label">Today's date</div>
+            <div class="summary-value owner-date-value">${esc(dateLabel)}</div>
+          </div>
+          <div class="owner-summary-card">
+            <div class="summary-label">Pizzas sold today</div>
+            <div class="summary-value">${nf.format(Number(info?.pizza_qty||0))}</div>
+          </div>
+          <div class="owner-summary-card">
+            <div class="summary-label">Total sales today</div>
+            <div class="summary-value">${money(info?.total_sales||0)}</div>
+          </div>
+          <div class="owner-summary-card">
+            <div class="summary-label">Highest-selling item today</div>
+            <div class="summary-value">${best?`${esc(best.name)} · ${nf.format(Number(best.qty||0))} sold`:'No sold-item data yet'}</div>
+          </div>
+        </div>
+        ${noDataNote}
+        <div class="owner-welcome-actions">
+          <button class="owner-dashboard-btn" id="ownerDashboardBtn" type="button">Dashboard</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const overlay=$('#ownerWelcomeOverlay');
+  const closeBtn=$('#ownerWelcomeClose');
+  const dashboardBtn=$('#ownerDashboardBtn');
+  if(closeBtn) closeBtn.onclick=closeOwnerWelcome;
+  if(dashboardBtn) dashboardBtn.onclick=()=>{closeOwnerWelcome();navTo('dashboard')};
+  if(overlay){
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeOwnerWelcome()});
+  }
+  setTimeout(()=>closeBtn?.focus(),0);
+}
 async function api(url, options={}) {
   const res = await fetch(url, options);
   let data = {};
@@ -23,19 +174,21 @@ $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault(); $('#loginError').textContent='';
   try {
     await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#loginUsername').value,password:$('#loginPassword').value})});
-    await bootstrap();
+    ownerWelcomeDisplayed=false;
+    await bootstrap(true);
   } catch(err){ $('#loginError').textContent=err.message; }
 });
-$('#logoutBtn').addEventListener('click', async()=>{try{await api('/api/logout',{method:'POST'})}catch(_){} showLogin()});
+$('#logoutBtn').addEventListener('click', async()=>{try{await api('/api/logout',{method:'POST'})}catch(_){} ownerWelcomeDisplayed=false; closeOwnerWelcome(); showLogin()});
 
-async function bootstrap(){
+async function bootstrap(showWelcome=false){
   try {
     const r=await api('/api/me'); me=r.user; settings=r.settings; showApp();
     $('#restaurantName').textContent=settings.restaurant_name||'Restaurant';
     $('#userName').textContent=me.display_name; $('#userRole').textContent=roleLabel(me.role);
     $('#avatar').textContent=(me.display_name||'U').trim().charAt(0).toUpperCase();
     $$('.owner-only').forEach(el=>el.classList.toggle('hidden-role',me.role!=='owner'));
-    buildBranchFilter(); navTo('dashboard');
+    buildBranchFilter(); await navTo('dashboard');
+    if(me.role==='owner') await showOwnerWelcome(showWelcome);
   } catch(_){showLogin()}
 }
 function roleLabel(r){return r==='owner'?'Owner / Admin':r==='manager'?'Manager':'Head Employee'}
@@ -86,11 +239,25 @@ function bars(items, formatter=money, limit=8){
 function empty(msg){return `<div class="empty">${esc(msg)}</div>`}
 
 function renderDashboard(){
-  const s=dash.sales,p=dash.purchase,inv=dash.inventory;
+  const s=dash.sales,p=dash.purchase,inv=dash.inventory,m=dash.management||{};
   const topDishes=(s.dishes||[]).slice(0,8).map(x=>({label:x.name,value:Number(x.qty)||0}));
   const paymentData=(s.payment_modes||[]).slice(0,7);
+  const best=m.highest_selling_item||s.dishes?.[0];
+  const topOutlet=m.highest_sales_branch;
+  const combinedLabel=(dash.branches||[]).length===2?'Both Branch Sales':'Total Sales';
+  const orderBody=inv.order_list?.length?orderListTable(inv.order_list):empty('No items currently need ordering.');
+
   $('#content').innerHTML=`
-    <div class="kpi-grid">${kpi('Total Sales',money(s.total))}${kpi('Items Sold',nf.format(s.dish_qty_total||0))}${kpi('Best Seller',s.has_dish_data?s.dishes[0].name:'—',s.has_dish_data?`${nf.format(s.dishes[0].qty)} sold`:'')}${kpi('Bills',nf.format(s.bills))}${kpi('Average Bill',money(s.avg_bill))}${kpi('Purchase / Expense',money(p.total))}</div>
+    <div class="kpi-grid">
+      ${kpi(combinedLabel,m.combined_sales!=null?money(m.combined_sales):money(s.total))}
+      ${kpi('Items Sold',nf.format(s.dish_qty_total||0))}
+      ${kpi('Best Seller',best?best.name:'—',best?`${nf.format(best.qty)} sold`:``)}
+      ${kpi('Estimated Cheese Used',`${qty(m.cheese_used_kg||0)} kg`,m.pizza_qty?`${nf.format(m.pizza_qty)} pizzas × 100 g`:'')}
+      ${kpi('Order List',nf.format(inv.order_count||0),'Low / out-of-stock items')}
+      ${kpi('Bills',nf.format(s.bills))}
+    </div>
+
+    ${panel('Management Highlights','',managementHighlights(dash.insights||[]))}
 
     <div class="grid-2 equal dashboard-graphs">
       <section class="panel graph-panel"><div class="panel-head"><h3>Sales Trend</h3></div><div class="chart-wrap"><canvas id="salesTrend"></canvas></div></section>
@@ -102,8 +269,12 @@ function renderDashboard(){
       <section class="panel graph-panel"><div class="panel-head"><h3>Sales by Payment Mode</h3></div><div class="chart-wrap chart-wrap-bars"><canvas id="paymentChart"></canvas></div></section>
     </div>
 
-    <div class="grid-2 equal">${panel('Order Type','',bars(s.order_types))}${panel('Inventory Status','',`<div class="status-grid"><div class="status-card"><strong>${inv.out_count||0}</strong><span>Out of stock</span></div><div class="status-card"><strong>${inv.low_count||0}</strong><span>Low stock</span></div><div class="status-card"><strong>${inv.has_stock_data?'Active':'—'}</strong><span>Stock data</span></div></div>`)}</div>
-    ${dash.insights?.length?panel('Management Highlights','',`<div class="insight-list">${dash.insights.map(x=>`<div class="insight">${esc(x)}</div>`).join('')}</div>`):''}
+    <div class="grid-2 equal">
+      ${panel('Outlet Performance','',topOutlet?`<div class="metric-row"><span>Highest-sales outlet</span><strong>${esc(topOutlet.branch_name)}</strong></div><div class="metric-row"><span>Outlet sales</span><strong>${money(topOutlet.sales)}</strong></div><div class="metric-row"><span>Top item</span><strong>${esc(topOutlet.top_item?.name||'—')}</strong></div>`:empty('No outlet comparison available.'))}
+      ${panel('Inventory Status','',`<div class="status-grid"><div class="status-card"><strong>${inv.out_count||0}</strong><span>Out of stock</span></div><div class="status-card"><strong>${inv.low_count||0}</strong><span>Low stock</span></div><div class="status-card"><strong>${inv.order_count||0}</strong><span>Order items</span></div></div>`)}
+    </div>
+
+    ${panel('Order List','',orderBody)}
     ${panel('Recent Uploads','',uploadTable(dash.recent_uploads,false))}`;
 
   requestAnimationFrame(()=>{
@@ -143,13 +314,35 @@ function renderPurchase(){const p=dash.purchase;$('#content').innerHTML=`<div cl
 
 function renderDaybook(){const d=dash.daybook,l=d.latest||{};$('#content').innerHTML=`<div class="kpi-grid">${kpi('Net Sales',l.net_sales!=null?money(l.net_sales):'—','Latest selected daybook')}${kpi('Total Receipts',l.receipts!=null?money(l.receipts):'—')}${kpi('Expenses',l.expenses!=null?money(l.expenses):'—')}${kpi('Net Receipts',l.net_receipts!=null?money(l.net_receipts):'—')}${kpi('Closing Balance',l.closing_balance!=null?money(l.closing_balance):'—')}${kpi('Finance Difference',l.difference!=null?money(l.difference):'—')}</div>${panel('Daybook history','Extracted from standard daybook labels',d.daily.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Net Sales</th><th>Receipts</th><th>Expenses</th><th>Net Receipts</th><th>Closing</th><th>Difference</th></tr></thead><tbody>${d.daily.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(branchName(x.branch_id))}</td><td>${x.net_sales==null?'—':money(x.net_sales)}</td><td>${x.receipts==null?'—':money(x.receipts)}</td><td>${x.expenses==null?'—':money(x.expenses)}</td><td>${x.net_receipts==null?'—':money(x.net_receipts)}</td><td>${x.closing_balance==null?'—':money(x.closing_balance)}</td><td>${x.difference==null?'—':money(x.difference)}</td></tr>`).join('')}</tbody></table></div>`:empty('No Daybook file uploaded for this filter.'))}`}
 
-function renderInventory(){const inv=dash.inventory;$('#content').innerHTML=`<div class="kpi-grid">${kpi('Out of Stock',nf.format(inv.out_count||0))}${kpi('Low Stock',nf.format(inv.low_count||0))}${kpi('Stock Rows',nf.format(inv.items?.length||0))}${kpi('Stock Data',inv.has_stock_data?'Active':'—')}${kpi('Branch',$('#branchFilter option:checked').textContent)}${kpi('Alerts',nf.format((inv.out_count||0)+(inv.low_count||0)))}</div>${inv.has_stock_data?panel('Stock alerts','',`<div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th>Branch</th><th>Item</th><th>Qty</th><th>Minimum</th><th>Unit</th><th>Date</th></tr></thead><tbody>${inv.items.map(x=>`<tr><td><span class="tag ${x.status}">${esc(x.status)}</span></td><td>${esc(branchName(x.branch_id))}</td><td>${esc(x.item)}</td><td>${nf.format(x.qty)}</td><td>${x.minimum==null?'—':nf.format(x.minimum)}</td><td>${esc(x.unit)}</td><td>${esc(x.date)}</td></tr>`).join('')}</tbody></table></div>`):empty('No stock data available.')}`}
+function orderListTable(items){
+  if(!items?.length)return empty('No items currently need ordering.');
+  return `<div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th>Branch</th><th>Item</th><th>Current</th><th>Minimum</th><th>Target</th><th>Order Qty</th><th>Unit</th></tr></thead><tbody>${items.map(x=>`<tr><td><span class="tag ${esc(x.status)}">${esc(x.status)}</span></td><td>${esc(branchName(x.branch_id))}</td><td><strong>${esc(x.item)}</strong></td><td>${qty(x.qty)}</td><td>${x.minimum==null?'—':qty(x.minimum)}</td><td>${x.target==null?'—':qty(x.target)}</td><td><strong>${qty(x.order_qty)}</strong></td><td>${esc(x.unit||'')}</td></tr>`).join('')}</tbody></table></div>`;
+}
 
+function renderInventory(){
+  const inv=dash.inventory,m=dash.management||{};
+  const cheeseRows=(m.branches||[]).filter(x=>x.cheese_stock);
+  const cheesePanel=cheeseRows.length?panel('Cheese Usage & Stock','',`<div class="table-wrap"><table class="table"><thead><tr><th>Branch</th><th>Pizzas Sold</th><th>Estimated Cheese Used</th><th>Cheese Stock</th><th>Minimum</th><th>Target</th><th>Needed to Target</th><th>Status</th></tr></thead><tbody>${cheeseRows.map(b=>{const c=b.cheese_stock;return `<tr><td>${esc(b.branch_name)}</td><td>${nf.format(b.pizza_qty)}</td><td>${qty(b.cheese_used_kg)} kg</td><td>${qty(c.current)} ${esc(c.unit)}</td><td>${c.minimum==null?'—':qty(c.minimum)+' '+esc(c.unit)}</td><td>${c.target==null?'—':qty(c.target)+' '+esc(c.unit)}</td><td>${qty(c.needed_to_target)} ${esc(c.unit)}</td><td><span class="tag ${esc(c.status)}">${esc(c.status)}</span></td></tr>`}).join('')}</tbody></table></div>`):'';
+
+  $('#content').innerHTML=`
+    <div class="kpi-grid">
+      ${kpi('Out of Stock',nf.format(inv.out_count||0))}
+      ${kpi('Low Stock',nf.format(inv.low_count||0))}
+      ${kpi('Order Items',nf.format(inv.order_count||0))}
+      ${kpi('Stock Rows',nf.format(inv.items?.length||0))}
+      ${kpi('Cheese Used',`${qty(m.cheese_used_kg||0)} kg`,m.pizza_qty?`${nf.format(m.pizza_qty)} pizzas`:``)}
+      ${kpi('Stock Data',inv.has_stock_data?'Active':'—')}
+    </div>
+    ${cheesePanel}
+    ${inv.has_stock_data?panel('Inventory','',`<div class="table-wrap"><table class="table"><thead><tr><th>Status</th><th>Branch</th><th>Item</th><th>Current</th><th>Minimum</th><th>Target</th><th>Order Qty</th><th>Unit</th><th>Date</th></tr></thead><tbody>${inv.items.map(x=>`<tr><td><span class="tag ${esc(x.status)}">${esc(x.status)}</span></td><td>${esc(branchName(x.branch_id))}</td><td>${esc(x.item)}</td><td>${qty(x.qty)}</td><td>${x.minimum==null?'—':qty(x.minimum)}</td><td>${x.target==null?'—':qty(x.target)}</td><td>${qty(x.order_qty||0)}</td><td>${esc(x.unit)}</td><td>${esc(x.date)}</td></tr>`).join('')}</tbody></table></div>`):empty('No Inventory Excel uploaded for the selected branch/date.')}
+    ${panel('Order List','',inv.order_list?.length?orderListTable(inv.order_list):empty('No items currently need ordering.'))}`;
+}
 
 function renderCompare(){
-  const b=dash.branches||[]; if(b.length<2){$('#content').innerHTML=empty('Branch comparison unavailable for this account.');return}
-  const card=x=>`<div class="branch-card"><h3>${esc(branchName(x.branch_id))}</h3><div class="metric-row"><span>Total sales</span><strong>${money(x.sales.total)}</strong></div><div class="metric-row"><span>Food / items sold</span><strong>${nf.format(x.sales.dish_qty_total||0)}</strong></div><div class="metric-row"><span>Best seller</span><strong>${esc(x.sales.dishes?.[0]?.name||'—')}</strong></div><div class="metric-row"><span>Bills</span><strong>${nf.format(x.sales.bills)}</strong></div><div class="metric-row"><span>Average bill</span><strong>${money(x.sales.avg_bill)}</strong></div><div class="metric-row"><span>Purchase / expense</span><strong>${money(x.purchase.total)}</strong></div></div>`;
-  $('#content').innerHTML=`<div class="compare-cards">${b.map(card).join('')}</div><div class="grid-2"><section class="panel"><div class="panel-head"><h3>Branch sales trend</h3></div><div class="chart-wrap"><canvas id="compareTrend"></canvas></div></section>${panel('Sales comparison','Total recorded sales',bars(b.map(x=>({label:branchName(x.branch_id),value:x.sales.total}))))}</div>`;
+  const b=dash.branches||[];
+  if(b.length<2){$('#content').innerHTML=empty('Branch comparison unavailable for this account.');return}
+  const card=x=>`<div class="branch-card"><h3>${esc(branchName(x.branch_id))}</h3><div class="metric-row"><span>Total sales</span><strong>${money(x.sales.total)}</strong></div><div class="metric-row"><span>Food / items sold</span><strong>${nf.format(x.sales.dish_qty_total||0)}</strong></div><div class="metric-row"><span>Best seller</span><strong>${esc(x.sales.dishes?.[0]?.name||'—')}</strong></div><div class="metric-row"><span>Estimated cheese used</span><strong>${qty(x.ingredient_usage?.cheese_used_kg||0)} kg</strong></div><div class="metric-row"><span>Low / out stock</span><strong>${nf.format(x.inventory?.low_count||0)}</strong></div><div class="metric-row"><span>Purchase / expense</span><strong>${money(x.purchase.total)}</strong></div></div>`;
+  $('#content').innerHTML=`<div class="compare-cards">${b.map(card).join('')}</div><div class="grid-2"><section class="panel"><div class="panel-head"><h3>Branch sales trend</h3></div><div class="chart-wrap"><canvas id="compareTrend"></canvas></div></section>${panel('Sales comparison','',bars(b.map(x=>({label:branchName(x.branch_id),value:x.sales.total}))))}</div>`;
   requestAnimationFrame(()=>drawLineChart($('#compareTrend'),b.map(x=>({name:branchName(x.branch_id),points:x.sales.daily})),['#d90819','#111111']));
 }
 
@@ -164,13 +357,14 @@ function renderUpload(){
   <div class="file-box"><strong>Daybook Excel</strong><input id="daybookFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Sales Excel</strong><input id="salesFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx">Sold Items template</a></div>
+  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx">Inventory template</a></div>
   </div><button class="btn primary" style="margin-top:18px" type="submit">Upload Excel Files</button><div id="uploadStatus" class="mini-stat" style="margin-top:10px"></div></form></section>`;
   $('#uploadForm').addEventListener('submit',handleUpload);
 }
 
 async function handleUpload(e){
   e.preventDefault();
-  const files=[['purchase',$('#purchaseFile').files[0]],['daybook',$('#daybookFile').files[0]],['sales',$('#salesFile').files[0]],['sold_items',$('#soldItemsFile').files[0]]].filter(x=>x[1]);
+  const files=[['purchase',$('#purchaseFile').files[0]],['daybook',$('#daybookFile').files[0]],['sales',$('#salesFile').files[0]],['sold_items',$('#soldItemsFile').files[0]],['inventory',$('#inventoryFile').files[0]]].filter(x=>x[1]);
   if(!files.length)return toast('Choose at least one Excel file',true);
   let done=0;
   for(const [type,file] of files){
