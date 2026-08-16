@@ -437,8 +437,8 @@ function renderUpload(){
   <div class="file-box"><strong>Purchase / Expense Excel</strong><input id="purchaseFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Daybook Excel</strong><input id="daybookFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Sales Excel</strong><input id="salesFile" type="file" accept=".xlsx,.xlsm"></div>
-  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx"></a></div>
-  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx"></a></div>
+  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx">Sold Items template</a></div>
+  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx">Inventory template</a></div>
   </div><button class="btn primary" style="margin-top:18px" type="submit">Upload Excel Files</button><div id="uploadStatus" class="mini-stat" style="margin-top:10px"></div></form></section>`;
   $('#uploadForm').addEventListener('submit',handleUpload);
 }
@@ -479,9 +479,8 @@ async function renderUsers(){
 }
 
 function renderSettings(){
-  $('#content').innerHTML=`<div class="settings-grid"><section class="panel"><div class="panel-head"><h3>Restaurant & branches</h3></div><form id="settingsForm"><div class="field"><label>Restaurant name</label><input id="setRestaurant" value="${esc(settings.restaurant_name)}" required></div><div class="field"><label>Branch 1 name</label><input id="setB1" value="${esc(settings.branch_1_name)}" required></div><div class="field"><label>Branch 2 name</label><input id="setB2" value="${esc(settings.branch_2_name)}" required></div><button class="btn primary">Save settings</button></form></section><section class="panel"><div class="panel-head"><h3>Inventory threshold</h3></div><form id="thresholdForm"><div class="field"><label>Branch</label><select id="thBranch"><option value="1">${esc(branchName(1))}</option><option value="2">${esc(branchName(2))}</option></select></div><div class="field"><label>Exact item name</label><input id="thItem" placeholder="Chicken Breast" required></div><div class="settings-grid"><div class="field"><label>Minimum qty</label><input id="thQty" type="number" step="0.01" required></div><div class="field"><label>Unit</label><input id="thUnit" placeholder="kg"></div></div><button class="btn secondary">Save threshold</button></form></section></div>`;
+  $('#content').innerHTML=`<div class="settings-single"><section class="panel"><div class="panel-head"><h3>Restaurant & branches</h3></div><form id="settingsForm"><div class="field"><label>Restaurant name</label><input id="setRestaurant" value="${esc(settings.restaurant_name)}" required></div><div class="field"><label>Branch 1 name</label><input id="setB1" value="${esc(settings.branch_1_name)}" required></div><div class="field"><label>Branch 2 name</label><input id="setB2" value="${esc(settings.branch_2_name)}" required></div><button class="btn primary">Save settings</button></form></section></div>`;
   $('#settingsForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({restaurant_name:$('#setRestaurant').value,branch_1_name:$('#setB1').value,branch_2_name:$('#setB2').value})});const r=await api('/api/me');settings=r.settings;$('#restaurantName').textContent=settings.restaurant_name;buildBranchFilter();toast('Settings saved')}catch(err){toast(err.message,true)}};
-  $('#thresholdForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/stock-thresholds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({branch_id:Number($('#thBranch').value),item_name:$('#thItem').value,minimum_qty:Number($('#thQty').value),unit:$('#thUnit').value})});toast('Stock threshold saved')}catch(err){toast(err.message,true)}};
 }
 
 function drawLineChart(canvas,datasets,colors){

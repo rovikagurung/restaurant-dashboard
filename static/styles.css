@@ -195,3 +195,8 @@ a{color:#000;text-decoration:none;transition:.15s}a:hover{color:var(--accent)}
 .inventory-status-panel .inventory-status-kpis .kpi{min-height:104px}
 .daybook-credit{color:#d90819!important;font-weight:800}
 .daybook-closing{color:#000!important;font-weight:750}
+
+
+/* V10.2 Settings */
+.settings-single{max-width:760px;margin:0 auto;}
+.settings-single .panel{width:100%;}

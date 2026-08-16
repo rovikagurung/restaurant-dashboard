@@ -1125,7 +1125,7 @@ class LoginBody(BaseModel):
     password: str
 
 
-APP_ASSET_VERSION = "10.1"
+APP_ASSET_VERSION = "10.2"
 
 
 @app.middleware("http")
