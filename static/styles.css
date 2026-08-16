@@ -155,23 +155,43 @@ a{color:#000;text-decoration:none;transition:.15s}a:hover{color:var(--accent)}
 .daybook-credit{font-weight:750;color:#333}
 .daybook-positive{color:#137c37;font-weight:750}
 
-/* V9.8 — center top KPI boxes as a group */
+/* V9.9 — full-width top KPI boxes */
 .kpi-grid{
   display:flex;
   flex-wrap:wrap;
-  justify-content:center;
+  justify-content:stretch;
   align-items:stretch;
+  width:100%;
   gap:12px;
 }
 .kpi-grid .kpi{
-  flex:0 1 220px;
-  width:220px;
-  max-width:220px;
+  flex:1 1 160px;
+  width:auto;
+  min-width:150px;
+  max-width:none;
+}
+@media(max-width:850px){
+  .kpi-grid .kpi{
+    flex:1 1 calc(50% - 12px);
+    min-width:220px;
+  }
 }
 @media(max-width:520px){
   .kpi-grid .kpi{
     flex:1 1 100%;
     width:100%;
+    min-width:0;
     max-width:none;
   }
 }
+
+
+/* V10.1 — dashboard inventory KPI cards + Daybook colour semantics */
+.kpi.kpi-warning{background:#fff8ed;border-color:#f1c27a}
+.kpi.kpi-warning .label,.kpi.kpi-warning .value{color:#d97706!important}
+.kpi.kpi-warning:hover:after{background:#d97706}
+.kpi.kpi-warning:hover .label,.kpi.kpi-warning:hover .value{color:#d97706!important}
+.inventory-status-panel .inventory-status-kpis{margin:0}
+.inventory-status-panel .inventory-status-kpis .kpi{min-height:104px}
+.daybook-credit{color:#d90819!important;font-weight:800}
+.daybook-closing{color:#000!important;font-weight:750}

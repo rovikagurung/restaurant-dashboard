@@ -41,12 +41,20 @@ function injectEnhancementStyles(){
     .owner-summary-card:hover{transform:translateY(-3px);border-color:#d90819;box-shadow:0 12px 28px rgba(0,0,0,.07)}
     .owner-summary-card .summary-label{font-size:12px;color:#6b6b6b;text-transform:uppercase;letter-spacing:.07em;font-weight:750;margin-bottom:7px}
     .owner-summary-card .summary-value{font-size:23px;color:#111;font-weight:850;line-height:1.2}
-    .owner-order-card{grid-column:1/-1;border-color:#f1c2c7;background:#fff8f9}
+    .owner-order-card{grid-column:1/-1;border-color:#ef9ca5;background:#fff3f4;box-shadow:0 8px 24px rgba(217,8,25,.08)}
+    .owner-order-card:hover{border-color:#d90819;box-shadow:0 12px 30px rgba(217,8,25,.14)}
+    .owner-order-card .summary-label{color:#b60716}
     .owner-order-card .summary-value{font-size:15px;color:#a90614;line-height:1.55}
     .owner-order-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-    .owner-order-chip{display:inline-flex;padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #efc0c5;color:#9e0714;font-size:12px;font-weight:750}
-    .owner-date-card{grid-column:1/-1;background:#fff;border-color:#f0c6ca}
-    .owner-date-card .owner-date-value{font-size:19px;color:#d90819}
+    .owner-order-chip{display:inline-flex;padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #e89ca4;color:#a90614;font-size:12px;font-weight:800}
+    .owner-date-card{background:#fff;border-color:#ededed}
+    .owner-date-card .owner-date-value{font-size:19px;color:#111}
+    .owner-sales-card.compare-up{background:#f3fcf5;border-color:#a9dfb8}
+    .owner-sales-card.compare-up .summary-value,.owner-sales-card.compare-up .owner-compare-line{color:#137c37}
+    .owner-sales-card.compare-down{background:#fff3f4;border-color:#efabb3}
+    .owner-sales-card.compare-down .summary-value,.owner-sales-card.compare-down .owner-compare-line{color:#c40818}
+    .owner-sales-card.compare-equal{background:#fafafa;border-color:#dedede}
+    .owner-compare-line{margin-top:8px;font-size:12px;line-height:1.45;font-weight:750;color:#666}
     .owner-welcome-note{margin:14px 0 0;padding:11px 13px;border-radius:12px;background:#fafafa;border:1px solid #ececec;color:#666;font-size:13px;line-height:1.45}
     .owner-welcome-actions{display:flex;justify-content:flex-end;margin-top:22px}
     .owner-dashboard-btn{border:1px solid #d90819;background:#d90819;color:#fff;border-radius:12px;padding:12px 22px;font-size:14px;font-weight:800;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
@@ -120,13 +128,35 @@ async function showOwnerWelcome(force=false){
       pizza_qty:0,
       total_sales:0,
       highest_sold_item:null,
-      has_data:false
+      has_data:false,
+      previous_week_has_data:false,
+      sales_comparison_direction:'none',
+      out_of_stock_orders:[]
     };
   }
 
   ownerWelcomeDisplayed=true;
   const best=info?.highest_sold_item;
   const dateLabel=info?.date_label||info?.date||'Date unavailable';
+  const direction=info?.sales_comparison_direction||'none';
+  const comparisonClass=direction==='up'?'compare-up':direction==='down'?'compare-down':direction==='equal'?'compare-equal':'';
+  const comparisonSymbol=direction==='up'?'▲':direction==='down'?'▼':'•';
+  const comparisonText=info?.previous_week_has_data
+    ? `${comparisonSymbol} ${money(info?.previous_week_sales||0)} on ${esc(info?.previous_week_date_label||'the same day last week')}${info?.sales_change_percent==null?'':` · ${Number(info.sales_change_percent)>=0?'+':''}${nf2.format(Number(info.sales_change_percent))}%`}`
+    : 'No sales data is available for the same day one week earlier.';
+
+  const outOrders=Array.isArray(info?.out_of_stock_orders)?info.out_of_stock_orders:[];
+  const outOrderBlock=outOrders.length
+    ? `<div class="owner-summary-card owner-order-card">
+         <div class="summary-label">Out-of-stock order</div>
+         <div class="summary-value">These items are out of stock and should be ordered:</div>
+         <div class="owner-order-chips">${outOrders.map(x=>`<span class="owner-order-chip">${esc(branchName(x.branch_id))} · ${esc(x.item)} · Order ${qty(x.order_qty)} ${esc(x.unit||'')}</span>`).join('')}</div>
+       </div>`
+    : `<div class="owner-summary-card owner-order-card" style="background:#f5fff8;border-color:#b9e6c6">
+         <div class="summary-label" style="color:#137c37">Out-of-stock order</div>
+         <div class="summary-value" style="color:#137c37">No items are currently out of stock.</div>
+       </div>`;
+
   const noDataNote=info?.has_data===false
     ? `<p class="owner-welcome-note">No restaurant data has been uploaded for this date yet.</p>`
     : '';
@@ -138,24 +168,26 @@ async function showOwnerWelcome(force=false){
         <button class="owner-welcome-close" id="ownerWelcomeClose" type="button" aria-label="Close welcome summary">×</button>
         <div class="owner-welcome-kicker">Restaurant snapshot</div>
         <h2 class="owner-welcome-title" id="ownerWelcomeTitle">Welcome back!</h2>
-        <p class="owner-welcome-sub">Restaurant performance across both branches for ${esc(dateLabel)}.</p>
+        <p class="owner-welcome-sub">Performance across both branches.</p>
         <div class="owner-welcome-grid">
           <div class="owner-summary-card owner-date-card">
             <div class="summary-label">Date</div>
             <div class="summary-value owner-date-value">${esc(dateLabel)}</div>
+          </div>
+          <div class="owner-summary-card owner-sales-card ${comparisonClass}">
+            <div class="summary-label">Total sales</div>
+            <div class="summary-value">${money(info?.total_sales||0)}</div>
+            <div class="owner-compare-line">${comparisonText}</div>
           </div>
           <div class="owner-summary-card">
             <div class="summary-label">Pizzas sold</div>
             <div class="summary-value">${nf.format(Number(info?.pizza_qty||0))}</div>
           </div>
           <div class="owner-summary-card">
-            <div class="summary-label">Total sales</div>
-            <div class="summary-value">${money(info?.total_sales||0)}</div>
-          </div>
-          <div class="owner-summary-card">
             <div class="summary-label">Highest-selling item</div>
             <div class="summary-value">${best?`${esc(best.name)} · ${nf.format(Number(best.qty||0))} sold`:'No sold-item data yet'}</div>
           </div>
+          ${outOrderBlock}
         </div>
         ${noDataNote}
         <div class="owner-welcome-actions">
@@ -175,6 +207,7 @@ async function showOwnerWelcome(force=false){
   }
   setTimeout(()=>closeBtn?.focus(),0);
 }
+
 async function api(url, options={}) {
   const res = await fetch(url, options);
   let data = {};
@@ -303,7 +336,7 @@ function renderDashboard(){
 
     <div class="grid-2 equal">
       ${panel('Outlet Performance','',topOutlet?`<div class="metric-row"><span>Highest-sales outlet</span><strong>${esc(topOutlet.branch_name)}</strong></div><div class="metric-row"><span>Outlet sales</span><strong>${money(topOutlet.sales)}</strong></div><div class="metric-row"><span>Top item</span><strong>${esc(topOutlet.top_item?.name||'—')}</strong></div>`:empty('No outlet comparison available.'))}
-      <section class="panel dashboard-link-panel" data-nav-page="inventory"><div class="panel-head"><h3>Inventory Status</h3></div><div class="status-grid"><div class="stock-status-card out"><strong>${inv.out_count||0}</strong><span>Out of stock</span></div><div class="stock-status-card low"><strong>${inv.low_count||0}</strong><span>Low stock</span></div><div class="stock-status-card ok"><strong>${okCount}</strong><span>OK</span></div></div></section>
+      <section class="panel dashboard-link-panel inventory-status-panel" data-nav-page="inventory"><div class="panel-head"><h3>Inventory Status</h3></div><div class="kpi-grid inventory-status-kpis">${kpi('Out of Stock',nf.format(inv.out_count||0),'','kpi-danger')}${kpi('Low Stock',nf.format(inv.low_count||0),'','kpi-warning')}</div></section>
     </div>
 
     <section class="panel dashboard-link-panel" data-nav-page="inventory"><div class="panel-head"><h3>Order List</h3></div>${orderBody}</section>
@@ -350,14 +383,14 @@ function renderDaybook(){
   const d=dash.daybook,l=d.latest||{};
   $('#content').innerHTML=`
     <div class="kpi-grid">
-      ${kpi('Net Sales',l.net_sales!=null?money(l.net_sales):'—','Latest selected daybook')}
-      ${kpi('Total Receipts',l.receipts!=null?money(l.receipts):'—')}
-      ${kpi('Credit',l.credit!=null?money(l.credit):'—')}
+      ${kpi('Net Sales',l.net_sales!=null?money(l.net_sales):'—','Latest selected daybook','kpi-positive')}
+      ${kpi('Total Receipts',l.receipts!=null?money(l.receipts):'—','','kpi-positive')}
+      ${kpi('Credit',l.credit!=null?money(l.credit):'—','','kpi-danger')}
       ${kpi('Expenses',l.expenses!=null?money(l.expenses):'—','','kpi-danger')}
       ${kpi('Net Receipts',l.net_receipts!=null?money(l.net_receipts):'—','','kpi-positive')}
-      ${kpi('Closing Balance',l.closing_balance!=null?money(l.closing_balance):'—','','kpi-positive')}
+      ${kpi('Closing Balance',l.closing_balance!=null?money(l.closing_balance):'—')}
     </div>
-    ${panel('Daybook history','',d.daily.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Net Sales</th><th>Receipts</th><th>Expenses</th><th>Credit</th><th>Net Receipts</th><th>Closing</th></tr></thead><tbody>${d.daily.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(branchName(x.branch_id))}</td><td>${x.net_sales==null?'—':money(x.net_sales)}</td><td>${x.receipts==null?'—':money(x.receipts)}</td><td class="daybook-expense">${bracketMoney(x.expenses)}</td><td class="daybook-credit">${bracketMoney(x.credit)}</td><td class="daybook-positive">${x.net_receipts==null?'—':money(x.net_receipts)}</td><td class="daybook-positive"><strong>${x.closing_balance==null?'—':money(x.closing_balance)}</strong></td></tr>`).join('')}</tbody></table></div>`:empty('No Daybook file uploaded for this filter.'))}`;
+    ${panel('Daybook history','',d.daily.length?`<div class="table-wrap"><table class="table"><thead><tr><th>Date</th><th>Branch</th><th>Net Sales</th><th>Receipts</th><th>Expenses</th><th>Credit</th><th>Net Receipts</th><th>Closing</th></tr></thead><tbody>${d.daily.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(branchName(x.branch_id))}</td><td class="daybook-positive">${x.net_sales==null?'—':money(x.net_sales)}</td><td class="daybook-positive">${x.receipts==null?'—':money(x.receipts)}</td><td class="daybook-expense">${bracketMoney(x.expenses)}</td><td class="daybook-credit">${bracketMoney(x.credit)}</td><td class="daybook-positive">${x.net_receipts==null?'—':money(x.net_receipts)}</td><td class="daybook-closing"><strong>${x.closing_balance==null?'—':money(x.closing_balance)}</strong></td></tr>`).join('')}</tbody></table></div>`:empty('No Daybook file uploaded for this filter.'))}`;
 }
 
 function orderListTable(items){
@@ -404,8 +437,8 @@ function renderUpload(){
   <div class="file-box"><strong>Purchase / Expense Excel</strong><input id="purchaseFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Daybook Excel</strong><input id="daybookFile" type="file" accept=".xlsx,.xlsm"></div>
   <div class="file-box"><strong>Sales Excel</strong><input id="salesFile" type="file" accept=".xlsx,.xlsm"></div>
-  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx"></a></div>
-  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx"></a></div>
+  <div class="file-box sold-items-box"><strong>Sold Items Excel</strong><input id="soldItemsFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/sold-items-template.xlsx">Sold Items template</a></div>
+  <div class="file-box"><strong>Inventory Excel</strong><input id="inventoryFile" type="file" accept=".xlsx,.xlsm"><a class="template-link" href="/inventory-template.xlsx">Inventory template</a></div>
   </div><button class="btn primary" style="margin-top:18px" type="submit">Upload Excel Files</button><div id="uploadStatus" class="mini-stat" style="margin-top:10px"></div></form></section>`;
   $('#uploadForm').addEventListener('submit',handleUpload);
 }

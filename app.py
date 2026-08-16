@@ -1042,7 +1042,11 @@ def build_insights(sales, purchase, inventory, branches, management=None):
 
 
 def build_owner_welcome():
-    """Return the previous local business-date snapshot across both branches."""
+    """Return the previous local business-date snapshot across both branches.
+
+    The snapshot also compares sales with the same weekday exactly seven days
+    earlier and returns only OUT-of-stock items for the popup order warning.
+    """
     snapshot_date_obj = datetime.now(APP_TIMEZONE).date() - timedelta(days=1)
     snapshot_date = snapshot_date_obj.isoformat()
     snapshot_ups = fetch_uploads([1, 2], snapshot_date, snapshot_date)
@@ -1058,17 +1062,60 @@ def build_owner_welcome():
         key=lambda x: (number(x.get("qty")), number(x.get("sales"))),
     ) if dishes else None
 
+    # Compare with the same weekday one week earlier.
+    previous_week_obj = snapshot_date_obj - timedelta(days=7)
+    previous_week_date = previous_week_obj.isoformat()
+    previous_week_ups = fetch_uploads([1, 2], previous_week_date, previous_week_date)
+    previous_week_sales = summarize_sales(
+        [u for u in previous_week_ups if u["file_type"] == "sales"],
+        [u for u in previous_week_ups if u["file_type"] == "sold_items"],
+    )
+    current_total = round(number(sales.get("total")), 2)
+    previous_total = round(number(previous_week_sales.get("total")), 2)
+    change_amount = round(current_total - previous_total, 2)
+    change_percent = round((change_amount / previous_total) * 100, 2) if previous_total else None
+    if not previous_week_ups:
+        comparison_direction = "none"
+    elif current_total > previous_total:
+        comparison_direction = "up"
+    elif current_total < previous_total:
+        comparison_direction = "down"
+    else:
+        comparison_direction = "equal"
+
+    inventory = inventory_from_uploads(snapshot_ups, [1, 2])
+    out_of_stock_orders = [
+        {
+            "branch_id": item.get("branch_id"),
+            "item": item.get("item"),
+            "qty": round(number(item.get("qty")), 2),
+            "target": item.get("target"),
+            "order_qty": round(number(item.get("order_qty")), 2),
+            "unit": item.get("unit") or "",
+        }
+        for item in inventory.get("items", [])
+        if item.get("status") == "out"
+    ]
+
     s = settings_dict()
     return {
         "date": snapshot_date,
         "date_label": snapshot_date_obj.strftime("%A, %d %B %Y"),
         "restaurant_name": s.get("restaurant_name", "Restaurant"),
         "pizza_qty": round(number(usage.get("pizza_qty")), 2),
-        "total_sales": round(number(sales.get("total")), 2),
+        "total_sales": current_total,
         "highest_sold_item": best,
         "bills": int(number(sales.get("bills"))),
         "tickets": int(number(sales.get("tickets", sales.get("bills")))),
         "has_data": bool(snapshot_ups),
+        "previous_week_date": previous_week_date,
+        "previous_week_date_label": previous_week_obj.strftime("%d %B %Y"),
+        "previous_week_sales": previous_total,
+        "previous_week_has_data": bool(previous_week_ups),
+        "sales_change_amount": change_amount,
+        "sales_change_percent": change_percent,
+        "sales_comparison_direction": comparison_direction,
+        "out_of_stock_orders": out_of_stock_orders,
     }
 
 
@@ -1078,7 +1125,7 @@ class LoginBody(BaseModel):
     password: str
 
 
-APP_ASSET_VERSION = "9.7"
+APP_ASSET_VERSION = "10.1"
 
 
 @app.middleware("http")
